@@ -1,6 +1,6 @@
-# flluf
+# flluf-lang
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: OSL-3.0](https://img.shields.io/badge/license-OSL--3.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange)](https://www.rust-lang.org)
 [![Cranelift](https://img.shields.io/badge/cranelift-0.134-purple)](https://github.com/bytecodealliance/wasmtime/tree/main/cranelift)
 
