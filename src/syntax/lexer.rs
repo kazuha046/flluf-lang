@@ -83,6 +83,7 @@ impl Lexer {
             "void" => Token::Void,
             "int" => Token::Int,
             "float" => Token::Float,
+            "string" => Token::Str,
             "if" => Token::If,
             "else" => Token::Else,
 

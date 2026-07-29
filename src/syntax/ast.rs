@@ -3,6 +3,18 @@ pub enum FllufType {
     Int,
     Float,
     Void,
+    String,
+}
+
+impl std::fmt::Display for FllufType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            FllufType::Int => write!(f, "int"),
+            FllufType::Float => write!(f, "float"),
+            FllufType::Void => write!(f, "void"),
+            FllufType::String => write!(f, "string"),
+        }
+    }
 }
 
 #[derive(Debug)]

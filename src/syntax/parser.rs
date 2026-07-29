@@ -1,7 +1,6 @@
-use anyhow::{Result, bail};
-
 use crate::syntax::ast::*;
 use crate::syntax::token::Token;
+use anyhow::{Result, bail};
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -10,22 +9,15 @@ pub struct Parser {
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
-        Self {
-            tokens,
-            pos: 0,
-        }
+        Self { tokens, pos: 0 }
     }
 
     fn peek(&self) -> &Token {
-        self.tokens.get(self.pos).unwrap_or_else(|| {
-            self.tokens.last().unwrap_or(&Token::Semi)
-        })
+        self.tokens.get(self.pos).unwrap_or(&Token::Eof)
     }
 
     fn advance(&mut self) -> Token {
-        let t = self.tokens.get(self.pos).cloned().unwrap_or_else(|| {
-            self.tokens.last().cloned().unwrap_or(Token::Semi)
-        });
+        let t = self.tokens.get(self.pos).cloned().unwrap_or(Token::Eof);
 
         self.pos += 1;
 
@@ -88,11 +80,13 @@ impl Parser {
                     use_system = true;
                 }
 
-                Token::Void | Token::Int | Token::Float => {
+                Token::Void | Token::Int | Token::Float | Token::Str => {
                     functions.push(self.parse_function()?);
                 }
 
-                _ => break,
+                Token::Eof => break,
+
+                t => bail!("expected function declaration, got {t}"),
             }
         }
 
@@ -143,8 +137,9 @@ impl Parser {
             Token::Int => Ok(FllufType::Int),
             Token::Float => Ok(FllufType::Float),
             Token::Void => Ok(FllufType::Void),
+            Token::Str => Ok(FllufType::String),
 
-            t => bail!("expected type (int/float/void), got {t}"),
+            t => bail!("expected type (int/float/void/string), got {t}"),
         }
     }
 
@@ -176,7 +171,7 @@ impl Parser {
 
             Token::If => self.parse_if(),
 
-            Token::Int | Token::Float | Token::Void => self.parse_var_decl(),
+            Token::Int | Token::Float | Token::Void | Token::Str => self.parse_var_decl(),
 
             _ => {
                 let value = self.expr()?;
@@ -260,21 +255,35 @@ impl Parser {
 
         loop {
             let op = match self.peek() {
-                Token::Eq => { self.advance(); BinOp::Eq }
-                Token::Ne => { self.advance(); BinOp::Ne }
-                Token::Lt => { self.advance(); BinOp::Lt }
-                Token::Gt => { self.advance(); BinOp::Gt }
-                Token::Le => { self.advance(); BinOp::Le }
-                Token::Ge => { self.advance(); BinOp::Ge }
+                Token::Eq => {
+                    self.advance();
+                    BinOp::Eq
+                }
+                Token::Ne => {
+                    self.advance();
+                    BinOp::Ne
+                }
+                Token::Lt => {
+                    self.advance();
+                    BinOp::Lt
+                }
+                Token::Gt => {
+                    self.advance();
+                    BinOp::Gt
+                }
+                Token::Le => {
+                    self.advance();
+                    BinOp::Le
+                }
+                Token::Ge => {
+                    self.advance();
+                    BinOp::Ge
+                }
 
                 _ => break,
             };
 
-            left = Expr::BinaryOp(
-                Box::new(left),
-                op,
-                Box::new(self.parse_add()?),
-            );
+            left = Expr::BinaryOp(Box::new(left), op, Box::new(self.parse_add()?));
         }
 
         Ok(left)
@@ -285,17 +294,19 @@ impl Parser {
 
         loop {
             let op = match self.peek() {
-                Token::Plus => { self.advance(); BinOp::Add }
-                Token::Minus => { self.advance(); BinOp::Sub }
+                Token::Plus => {
+                    self.advance();
+                    BinOp::Add
+                }
+                Token::Minus => {
+                    self.advance();
+                    BinOp::Sub
+                }
 
                 _ => break,
             };
 
-            left = Expr::BinaryOp(
-                Box::new(left),
-                op,
-                Box::new(self.parse_mul()?),
-            );
+            left = Expr::BinaryOp(Box::new(left), op, Box::new(self.parse_mul()?));
         }
 
         Ok(left)
@@ -306,17 +317,19 @@ impl Parser {
 
         loop {
             let op = match self.peek() {
-                Token::Star => { self.advance(); BinOp::Mul }
-                Token::Slash => { self.advance(); BinOp::Div }
+                Token::Star => {
+                    self.advance();
+                    BinOp::Mul
+                }
+                Token::Slash => {
+                    self.advance();
+                    BinOp::Div
+                }
 
                 _ => break,
             };
 
-            left = Expr::BinaryOp(
-                Box::new(left),
-                op,
-                Box::new(self.parse_atom()?),
-            );
+            left = Expr::BinaryOp(Box::new(left), op, Box::new(self.parse_atom()?));
         }
 
         Ok(left)
@@ -324,9 +337,18 @@ impl Parser {
 
     fn parse_atom(&mut self) -> Result<Expr> {
         match self.peek().clone() {
-            Token::Integer(n) => { self.advance(); Ok(Expr::IntLit(n)) }
-            Token::FloatLit(n) => { self.advance(); Ok(Expr::FloatLit(n)) }
-            Token::StringLit(s) => { self.advance(); Ok(Expr::StringLit(s)) }
+            Token::Integer(n) => {
+                self.advance();
+                Ok(Expr::IntLit(n))
+            }
+            Token::FloatLit(n) => {
+                self.advance();
+                Ok(Expr::FloatLit(n))
+            }
+            Token::StringLit(s) => {
+                self.advance();
+                Ok(Expr::StringLit(s))
+            }
 
             Token::LParen => {
                 self.advance();
@@ -371,6 +393,7 @@ impl Parser {
             Token::Void => "void".to_string(),
             Token::Int => "int".to_string(),
             Token::Float => "float".to_string(),
+            Token::Str => "string".to_string(),
 
             t => panic!("expected name, got {t}"),
         }

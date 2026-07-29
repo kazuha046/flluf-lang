@@ -5,8 +5,18 @@ int Sum(int x, int y):
 	return x + y;
 }
 
+string Text(string input):
+{
+	return Log(input);
+}
+
 void Main():
 {
+	string testString = "HII";
+
+	Log(testString);
+	Log(Text("SSS"));
+
 	Log(12); // If `use System;`
 	System::Log("12 as string"); // If don't `use System;`
 

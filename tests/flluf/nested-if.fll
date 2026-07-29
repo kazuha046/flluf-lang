@@ -1,0 +1,29 @@
+use System;
+
+void Main():
+{
+	int x = 10;
+	
+	if (x > 0):
+	{
+		if (x > 5):
+		{
+			if (x == 10):
+			{
+				Log(999);
+			}
+			else:
+			{
+				Log(0);
+			}
+		}
+		else:
+		{
+			Log(0);
+		}
+	}
+	else:
+	{
+		Log(0);
+	}
+}

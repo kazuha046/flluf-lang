@@ -1,0 +1,6 @@
+use System;
+
+void Main():
+{
+	Log("1" + 2); // Error: cannot use string in arithmetic
+}

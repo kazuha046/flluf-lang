@@ -1,10 +1,12 @@
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
+    Eof,
     Use,
     Return,
     Void,
     Int,
     Float,
+    Str,
     If,
     Else,
 
@@ -39,11 +41,13 @@ pub enum Token {
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Token::Eof => write!(f, "end of file"),
             Token::Use => write!(f, "use"),
             Token::Return => write!(f, "return"),
             Token::Void => write!(f, "void"),
             Token::Int => write!(f, "int"),
             Token::Float => write!(f, "float"),
+            Token::Str => write!(f, "string"),
             Token::If => write!(f, "if"),
             Token::Else => write!(f, "else"),
             Token::Integer(n) => write!(f, "{n}"),

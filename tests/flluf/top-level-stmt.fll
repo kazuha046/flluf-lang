@@ -1,0 +1,6 @@
+int Calc(int x, int y):
+{
+	return x + y;
+}
+
+Calc(1, 2); // Error: top-level statement
