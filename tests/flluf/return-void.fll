@@ -3,5 +3,5 @@ use System;
 void Main():
 {
 	Log(10);
-	return System::Exit(0);
+	return System::Exit(1);
 }

@@ -273,7 +273,7 @@ impl Compiler {
 
         sig.params.push(AbiParam::new(types::I64));
 
-        let id = self.import("exit", &sig);
+        let id = self.import("__flluf_exit", &sig);
         let func_ref = self.module.declare_func_in_func(id, &mut b.func);
 
         b.ins().call(func_ref, &[arg]);

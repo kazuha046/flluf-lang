@@ -1,11 +1,10 @@
 mod codegen;
 mod syntax;
 
-use std::path::PathBuf;
-use std::process::Command;
-
 use anyhow::{Context, Result};
 use clap::{Parser as ClapParser, Subcommand};
+use std::path::PathBuf;
+use std::process::Command;
 
 const RUNTIME_C: &str = r##"#include <stdio.h>
 #include <stdlib.h>
@@ -18,6 +17,12 @@ double __flluf_log_f64(double val) {
 }
 const char* __flluf_log_ptr(const char* val) {
     printf("%s\n", val); return val;
+}
+void __flluf_exit(long long code) {
+    if (code != 0) {
+        fprintf(stderr, "exit code %lld\n", code);
+    }
+    exit(code);
 }
 "##;
 
