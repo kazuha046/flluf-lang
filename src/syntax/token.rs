@@ -7,7 +7,6 @@ pub enum Token {
     Float,
     If,
     Else,
-    Exit,
 
     Integer(i64),
     FloatLit(f64),
@@ -19,12 +18,12 @@ pub enum Token {
     Star,
     Slash,
 
-    Eq, // ==
-    Ne, // !=
-    Lt, // <
-    Gt, // >
-    Le, // <=
-    Ge, // >=
+    Eq,
+    Ne,
+    Lt,
+    Gt,
+    Le,
+    Ge,
 
     LParen,
     RParen,
@@ -35,9 +34,6 @@ pub enum Token {
     Equals,
     Comma,
     ColonColon,
-
-    Comment,
-    Eof,
 }
 
 impl std::fmt::Display for Token {
@@ -50,7 +46,6 @@ impl std::fmt::Display for Token {
             Token::Float => write!(f, "float"),
             Token::If => write!(f, "if"),
             Token::Else => write!(f, "else"),
-            Token::Exit => write!(f, "Exit"),
             Token::Integer(n) => write!(f, "{n}"),
             Token::FloatLit(n) => write!(f, "{n}"),
             Token::StringLit(s) => write!(f, "\"{s}\""),
@@ -74,8 +69,6 @@ impl std::fmt::Display for Token {
             Token::Equals => write!(f, "="),
             Token::Comma => write!(f, ","),
             Token::ColonColon => write!(f, "::"),
-            Token::Comment => write!(f, "//"),
-            Token::Eof => write!(f, "<eof>"),
         }
     }
 }

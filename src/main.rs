@@ -1,54 +1,97 @@
-mod ast;
 mod codegen;
-mod lexer;
-mod parser;
-mod token;
+mod syntax;
 
-use std::env;
 use std::path::PathBuf;
 use std::process::Command;
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
+use anyhow::{Context, Result};
+use clap::{Parser as ClapParser, Subcommand};
 
-    if args.len() < 2 {
-        eprintln!("Usage: flluf-lang <input.fll> [-o output]");
-        std::process::exit(1);
+const RUNTIME_C: &str = r##"#include <stdio.h>
+#include <stdlib.h>
+
+long long __flluf_log_i64(long long val) {
+    printf("%lld\n", val); return val;
+}
+double __flluf_log_f64(double val) {
+    printf("%f\n", val); return val;
+}
+const char* __flluf_log_ptr(const char* val) {
+    printf("%s\n", val); return val;
+}
+"##;
+
+#[derive(ClapParser)]
+#[command(name = "flluf", version)]
+struct Cli {
+    #[command(subcommand)]
+    cmd: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    Build {
+        file: PathBuf,
+        #[arg(short)]
+        output: Option<PathBuf>,
+    },
+    Run {
+        file: PathBuf,
+    },
+}
+
+fn main() -> Result<()> {
+    let cli = Cli::parse();
+
+    match cli.cmd {
+        Commands::Build { file, output } => {
+            build(&file, output.as_ref())?;
+        }
+
+        Commands::Run { file } => {
+            let exe = build(&file, None)?;
+
+            let status = Command::new(&exe)
+                .status()
+                .with_context(|| format!("failed to run {}", exe.display()))?;
+
+            std::process::exit(status.code().unwrap_or(1));
+        }
     }
 
-    let input_path = PathBuf::from(&args[1]);
+    Ok(())
+}
 
-    let output_path = if let Some(pos) = args.iter().position(|a| a == "-o") {
-        args.get(pos + 1).cloned().map(PathBuf::from)
-    } else {
-        Some(input_path.with_extension("o"))
-    };
+fn build(input: &PathBuf, output: Option<&PathBuf>) -> Result<PathBuf> {
+    let cwd = PathBuf::from(".");
+    let parent = input.parent().unwrap_or(&cwd);
+    let target = parent.join("target");
+    let build_dir = target.join("build");
 
-    let source = std::fs::read_to_string(&input_path).unwrap_or_else(|e| {
-        eprintln!("Error reading file: {e}");
-        std::process::exit(1);
-    });
+    std::fs::create_dir_all(&build_dir).context("create target/build")?;
 
-    let tokens: Vec<token::Token> = lexer::Lexer::new(&source).collect();
-    let mut parser = parser::Parser::new(tokens);
-    let program = parser.parse_program();
+    let stem = input.file_stem().unwrap().to_str().unwrap();
+    let obj_path = build_dir.join(format!("{stem}.o"));
+    let rt_path = build_dir.join("runtime.c");
 
-    let obj_data = codegen::compile(&program);
+    let src =
+        std::fs::read_to_string(input).with_context(|| format!("read {}", input.display()))?;
 
-    let obj_path = output_path.unwrap_or_else(|| input_path.with_extension("o"));
+    let toks: Vec<syntax::token::Token> = syntax::lexer::Lexer::new(&src).collect();
 
-    std::fs::write(&obj_path, &obj_data).unwrap_or_else(|e| {
-        eprintln!("Error writing object file: {e}");
-        std::process::exit(1);
-    });
+    let program = syntax::parser::Parser::new(toks)
+        .parse()
+        .with_context(|| format!("failed to parse {}", input.display()))?;
 
-    let exe_path = obj_path.with_extension("");
-    let runtime_path = obj_path.parent().unwrap().join("runtime.c");
+    let obj_data = codegen::compile(&program)
+        .with_context(|| format!("failed to compile {}", input.display()))?;
 
-    std::fs::write(&runtime_path, RUNTIME_C).unwrap_or_else(|e| {
-        eprintln!("Error writing runtime: {e}");
-        std::process::exit(1);
-    });
+    std::fs::write(&obj_path, &obj_data)
+        .with_context(|| format!("write {}", obj_path.display()))?;
+
+    std::fs::write(&rt_path, RUNTIME_C).with_context(|| format!("write {}", rt_path.display()))?;
+
+    let exe_path = output.cloned().unwrap_or_else(|| target.join(stem));
 
     let cc = if cfg!(target_os = "linux") {
         "gcc"
@@ -56,40 +99,29 @@ fn main() {
         "cc"
     };
 
-    let status = Command::new(cc)
+    let output = Command::new(cc)
+        .arg("-no-pie")
         .arg("-o")
         .arg(&exe_path)
         .arg(&obj_path)
-        .arg(&runtime_path)
-        .status()
-        .unwrap_or_else(|e| {
-            eprintln!("Error linking: {e}");
-            std::process::exit(1);
-        });
+        .arg(&rt_path)
+        .arg("-lm")
+        .output()
+        .with_context(|| format!("{cc} link failed"))?;
 
-    if !status.success() {
-        eprintln!("Linker failed");
-        std::process::exit(1);
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        for line in stderr.lines() {
+            if line.contains("error:") || !line.contains("warning:") {
+                eprintln!("{line}");
+            }
+        }
+
+        anyhow::bail!("link failed");
     }
 
-    println!("Compiled: {}", exe_path.display());
-}
+    eprintln!("compiled to {}", exe_path.display());
 
-const RUNTIME_C: &str = r##"#include <stdio.h>
-#include <stdlib.h>
-
-long long __flluf_log_i64(long long val) {
-    printf("%lld\n", val);
-    return val;
+    Ok(exe_path)
 }
-
-double __flluf_log_f64(double val) {
-    printf("%f\n", val);
-    return val;
-}
-
-const char* __flluf_log_ptr(const char* val) {
-    printf("%s\n", val);
-    return val;
-}
-"##;

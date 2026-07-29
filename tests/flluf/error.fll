@@ -1,4 +1,4 @@
 void Main():
 {
-	Log("H");
+	Log("H"); // Error
 }

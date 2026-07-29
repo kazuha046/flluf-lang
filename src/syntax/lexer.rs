@@ -1,4 +1,4 @@
-use crate::token::Token;
+use crate::syntax::token::Token;
 
 #[derive(Debug)]
 pub struct Lexer {
@@ -56,7 +56,6 @@ impl Lexer {
                 break;
             }
         }
-
         if is_float {
             Token::FloatLit(s.parse().unwrap_or(0.0))
         } else {
@@ -64,7 +63,7 @@ impl Lexer {
         }
     }
 
-    fn read_ident_or_keyword(&mut self, first: char) -> Token {
+    fn read_ident(&mut self, first: char) -> Token {
         let mut s = String::new();
 
         s.push(first);
@@ -86,7 +85,6 @@ impl Lexer {
             "float" => Token::Float,
             "if" => Token::If,
             "else" => Token::Else,
-            "Exit" => Token::Exit,
 
             _ => Token::Ident(s),
         }
@@ -122,16 +120,13 @@ impl Lexer {
         Token::StringLit(s)
     }
 
-    fn read_comment(&mut self) -> Token {
+    fn skip_comment(&mut self) {
         while let Some(c) = self.peek() {
             if c == '\n' {
                 break;
             }
-
             self.advance();
         }
-
-        Token::Comment
     }
 }
 
@@ -139,74 +134,77 @@ impl Iterator for Lexer {
     type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.skip_whitespace();
+        loop {
+            self.skip_whitespace();
 
-        let c = self.advance()?;
+            let c = self.advance()?;
 
-        Some(match c {
-            '+' => Token::Plus,
-            '-' => Token::Minus,
-            '*' => Token::Star,
-            '/' => {
-                if self.peek() == Some('/') {
-                    self.advance();
-                    self.read_comment()
-                } else {
-                    Token::Slash
+            return Some(match c {
+                '+' => Token::Plus,
+                '-' => Token::Minus,
+                '*' => Token::Star,
+                '/' => {
+                    if self.peek() == Some('/') {
+                        self.advance();
+                        self.skip_comment();
+                        continue;
+                    } else {
+                        Token::Slash
+                    }
                 }
-            }
-            '(' => Token::LParen,
-            ')' => Token::RParen,
-            '{' => Token::LBrace,
-            '}' => Token::RBrace,
-            ':' => {
-                if self.peek() == Some(':') {
-                    self.advance();
-                    Token::ColonColon
-                } else {
-                    Token::Colon
+                '(' => Token::LParen,
+                ')' => Token::RParen,
+                '{' => Token::LBrace,
+                '}' => Token::RBrace,
+                ':' => {
+                    if self.peek() == Some(':') {
+                        self.advance();
+                        Token::ColonColon
+                    } else {
+                        Token::Colon
+                    }
                 }
-            }
-            ';' => Token::Semi,
-            '=' => {
-                if self.peek() == Some('=') {
-                    self.advance();
-                    Token::Eq
-                } else {
-                    Token::Equals
+                ';' => Token::Semi,
+                '=' => {
+                    if self.peek() == Some('=') {
+                        self.advance();
+                        Token::Eq
+                    } else {
+                        Token::Equals
+                    }
                 }
-            }
-            ',' => Token::Comma,
-            '!' => {
-                if self.peek() == Some('=') {
-                    self.advance();
-                    Token::Ne
-                } else {
-                    panic!("unexpected '!' without '='");
+                ',' => Token::Comma,
+                '!' => {
+                    if self.peek() == Some('=') {
+                        self.advance();
+                        Token::Ne
+                    } else {
+                        panic!("unexpected '!'")
+                    }
                 }
-            }
-            '<' => {
-                if self.peek() == Some('=') {
-                    self.advance();
-                    Token::Le
-                } else {
-                    Token::Lt
+                '<' => {
+                    if self.peek() == Some('=') {
+                        self.advance();
+                        Token::Le
+                    } else {
+                        Token::Lt
+                    }
                 }
-            }
-            '>' => {
-                if self.peek() == Some('=') {
-                    self.advance();
-                    Token::Ge
-                } else {
-                    Token::Gt
+                '>' => {
+                    if self.peek() == Some('=') {
+                        self.advance();
+                        Token::Ge
+                    } else {
+                        Token::Gt
+                    }
                 }
-            }
-            '"' => self.read_string(),
+                '"' => self.read_string(),
 
-            c if c.is_ascii_digit() => self.read_number(c),
-            c if c.is_alphabetic() || c == '_' => self.read_ident_or_keyword(c),
-            
-            _ => panic!("unexpected character: '{c}'"),
-        })
+                c if c.is_ascii_digit() => self.read_number(c),
+                c if c.is_alphabetic() || c == '_' => self.read_ident(c),
+
+                c => panic!("unexpected character: '{c}'"),
+            });
+        }
     }
 }
