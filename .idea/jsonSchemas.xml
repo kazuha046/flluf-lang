@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="JsonSchemaMappingsProjectConfiguration">
+    <state>
+      <map>
+        <entry key="TextMate Grammar">
+          <value>
+            <SchemaInfo>
+              <option name="name" value="TextMate Grammar" />
+              <option name="relativePathToSchema" value="https://www.schemastore.org/tmlanguage.json" />
+              <option name="applicationDefined" value="true" />
+              <option name="patterns">
+                <list>
+                  <Item>
+                    <option name="path" value="flluf.tmLanguage.json" />
+                  </Item>
+                  <Item>
+                    <option name="path" value="flluf.tmBundle/Syntaxes/flluf.tmLanguage.json" />
+                  </Item>
+                  <Item>
+                    <option name="path" value="flluf.tmBundle/flluf.tmLanguage.json" />
+                  </Item>
+                </list>
+              </option>
+            </SchemaInfo>
+          </value>
+        </entry>
+      </map>
+    </state>
+  </component>
+</project>

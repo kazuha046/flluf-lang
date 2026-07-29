@@ -1,0 +1,48 @@
+use System;
+
+int Sum(int x, int y):
+{
+	return x + y;
+}
+
+void Main():
+{
+	Log(12); // If `use System;`
+	System::Log("12 as string"); // If don't `use System;`
+
+	Log(12 + 6); // Output: 18
+
+	int result1 = Sum(12, 65);
+	Log(result1); // Output: 77
+
+	SumWithLog(1, 3); // Output: 4
+
+	Log(12 * 2); // Output: 24
+	Log(12 / 2); // Output: 6
+	Log(12 - 2); // Output: 10
+
+	// Log("1" + 2); // Error
+
+	return Exit(0) // status code. 0 - Ok, 1 - Error. Not necessary. Exit is part of System package
+	// next code won't work.
+
+	if(result1 == 77):
+	{
+		return Exit(1);
+	}
+	else if(result1 >= 76): // All: <, >, <=, >=, ==, !=
+	// Or directly else if ((1 + 2) * 2 != 4): {return Exit(0);}
+	// Or func: if (Sum(2 + 2) == 4): {return Exit(0);}
+	{
+		return Exit(0);
+	}
+	else:
+	{
+		return System::Exit(0);
+	}
+}
+
+float SumWithLog(float x, float y):
+{
+	return Log(x + y);
+}
