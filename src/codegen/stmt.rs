@@ -21,7 +21,7 @@ impl Compiler {
 
                 let slot = b.create_sized_stack_slot(StackSlotData::new(
                     StackSlotKind::ExplicitSlot,
-                    ir_ty.bytes() as u32,
+                    ir_ty.bytes(),
                     0,
                 ));
 

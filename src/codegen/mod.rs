@@ -136,7 +136,7 @@ impl Compiler {
 
             let slot = builder.create_sized_stack_slot(StackSlotData::new(
                 StackSlotKind::ExplicitSlot,
-                ir_ty.bytes() as u32,
+                ir_ty.bytes(),
                 0,
             ));
 
@@ -263,18 +263,23 @@ impl Compiler {
 
         self.module.define_data(id, &ctx).unwrap();
 
-        let gv = self.module.declare_data_in_func(id, &mut b.func);
+        let gv = self.module.declare_data_in_func(id, b.func);
 
         b.ins().symbol_value(types::I64, gv)
     }
 
     pub fn emit_exit(&mut self, b: &mut FunctionBuilder, arg: Value) {
         let mut sig = self.module.make_signature();
-
         sig.params.push(AbiParam::new(types::I64));
 
-        let id = self.import("__flluf_exit", &sig);
-        let func_ref = self.module.declare_func_in_func(id, &mut b.func);
+        #[cfg(not(target_os = "windows"))]
+        let name = "exit";
+
+        #[cfg(target_os = "windows")]
+        let name = "ExitProcess";
+
+        let id = self.import(name, &sig);
+        let func_ref = self.module.declare_func_in_func(id, b.func);
 
         b.ins().call(func_ref, &[arg]);
     }

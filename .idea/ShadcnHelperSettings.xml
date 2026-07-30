@@ -3078,6 +3078,66 @@
         <option name="homepage" value="https://shadcndashboard.dev" />
         <option name="urlTemplate" value="https://shadcndashboard.dev/r/{name}.json" />
       </RegistryConfigState>
+      <RegistryConfigState>
+        <option name="id" value="central-kinetic" />
+        <option name="name" value="Kinetic" />
+        <option name="namespace" value="@kinetic" />
+        <option name="baseUrl" value="https://kinetic.itsjay.in/r" />
+        <option name="stylePath" value="/{name}.json" />
+        <option name="type" value="community" />
+        <option name="enabled" value="false" />
+        <option name="description" value="A Figma-like scrub number field for shadcn/ui (base-nova). Digit animation by Calligraph." />
+        <option name="homepage" value="https://kinetic.itsjay.in" />
+        <option name="urlTemplate" value="https://kinetic.itsjay.in/r/{name}.json" />
+      </RegistryConfigState>
+      <RegistryConfigState>
+        <option name="id" value="central-paceui-gsap" />
+        <option name="name" value="Paceui-gsap" />
+        <option name="namespace" value="@paceui-gsap" />
+        <option name="baseUrl" value="https://gsap.paceui.com/r" />
+        <option name="stylePath" value="/{name}.json" />
+        <option name="type" value="community" />
+        <option name="enabled" value="false" />
+        <option name="description" value="Animated GSAP components crafted for smooth interaction and rich detail." />
+        <option name="homepage" value="https://gsap.paceui.com" />
+        <option name="urlTemplate" value="https://gsap.paceui.com/r/{name}.json" />
+      </RegistryConfigState>
+      <RegistryConfigState>
+        <option name="id" value="central-retab" />
+        <option name="name" value="Retab" />
+        <option name="namespace" value="@retab" />
+        <option name="baseUrl" value="https://ui.retab.com/r" />
+        <option name="stylePath" value="/{name}.json" />
+        <option name="type" value="community" />
+        <option name="enabled" value="false" />
+        <option name="description" value="Document-processing UI components for Retab — file, OCR, and data viewers, schema builders, dropzones, and extraction blocks, built on shadcn/ui." />
+        <option name="homepage" value="https://ui.retab.com" />
+        <option name="urlTemplate" value="https://ui.retab.com/r/{name}.json" />
+      </RegistryConfigState>
+      <RegistryConfigState>
+        <option name="id" value="central-usva" />
+        <option name="name" value="Usva" />
+        <option name="namespace" value="@usva" />
+        <option name="baseUrl" value="https://usva.build/r" />
+        <option name="stylePath" value="/{name}.json" />
+        <option name="type" value="community" />
+        <option name="enabled" value="false" />
+        <option name="description" value="A React design language in three themes, where kajo is atmospheric and dark, sisu is dense and quick, and savi is the light ground. One token vocabulary underneath, including WebGL atmospheres that honour reduced-motion. Every component installs from npm or copies in from this registry." />
+        <option name="homepage" value="https://usva.build" />
+        <option name="urlTemplate" value="https://usva.build/r/{name}.json" />
+      </RegistryConfigState>
+      <RegistryConfigState>
+        <option name="id" value="central-atelier" />
+        <option name="name" value="Atelier" />
+        <option name="namespace" value="@atelier" />
+        <option name="baseUrl" value="https://www.atelier-ui.com/r" />
+        <option name="stylePath" value="/{name}.json" />
+        <option name="type" value="community" />
+        <option name="enabled" value="false" />
+        <option name="description" value="A WebGL and Motion system for React that runs many effects on one shared canvas. Shader, cursor, scroll and text effects, 3D galleries, plus page transitions for Next.js. Built with Three.js, React Three Fiber, Motion, and Lenis smooth scroll." />
+        <option name="homepage" value="https://www.atelier-ui.com" />
+        <option name="urlTemplate" value="https://www.atelier-ui.com/r/{name}.json" />
+      </RegistryConfigState>
     </registryConfigs>
   </component>
 </project>
