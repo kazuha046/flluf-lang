@@ -1,6 +1,8 @@
 use crate::codegen::*;
+use crate::syntax::ast::Stmt;
 use anyhow::Result;
 use cranelift::codegen::ir::types;
+use cranelift::prelude::*;
 use cranelift_frontend::FunctionBuilder;
 
 impl Compiler {
