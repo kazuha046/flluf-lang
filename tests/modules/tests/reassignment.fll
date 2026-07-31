@@ -1,0 +1,13 @@
+pub void Re(mut string name):
+{
+	Log(name);
+
+	name = "fix";
+
+	Log(name);
+}
+
+pub void Do():
+{
+	Log("Do");
+}

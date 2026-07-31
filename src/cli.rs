@@ -18,4 +18,7 @@ pub enum Commands {
     Run {
         file: PathBuf,
     },
+    New {
+        name: String,
+    },
 }

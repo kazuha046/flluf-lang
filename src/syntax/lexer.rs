@@ -80,6 +80,8 @@ impl Lexer {
         match s.as_str() {
             "use" => Token::Use,
             "return" => Token::Return,
+            "mut" => Token::Mut,
+            "pub" => Token::Pub,
             "void" => Token::Void,
             "int" => Token::Int,
             "float" => Token::Float,

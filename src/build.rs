@@ -13,23 +13,13 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf> {
 
     #[cfg(target_os = "windows")]
     let (obj_ext, exe_ext) = (".obj", ".exe");
-
     #[cfg(not(target_os = "windows"))]
     let (obj_ext, exe_ext) = (".o", "");
 
     let obj_path = build_dir.join(format!("{stem}{obj_ext}"));
+    let resolver = crate::resolver::ModuleResolver::resolve(input)?;
 
-    let src =
-        std::fs::read_to_string(input).with_context(|| format!("read {}", input.display()))?;
-
-    let toks: Vec<crate::syntax::token::Token> =
-        crate::syntax::lexer::Lexer::new(&src).collect();
-
-    let program = crate::syntax::parser::Parser::new(toks)
-        .parse()
-        .with_context(|| format!("failed to parse {}", input.display()))?;
-
-    let obj_data = crate::codegen::compile(&program)
+    let obj_data = crate::codegen::compile(&resolver)
         .with_context(|| format!("failed to compile {}", input.display()))?;
 
     std::fs::write(&obj_path, &obj_data)

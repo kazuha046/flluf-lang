@@ -67,69 +67,168 @@ impl Parser {
 
     pub fn parse(&mut self) -> Result<Program> {
         let mut use_system = false;
+        let mut uses = Vec::new();
         let mut functions = Vec::new();
+        let mut globals = Vec::new();
 
         loop {
             match self.peek() {
                 Token::Use => {
                     self.advance();
+                    let u = self.parse_use_path()?;
 
-                    self.expect(&Token::Ident("System".to_string()))?;
-                    self.expect(&Token::Semi)?;
+                    match u {
+                        Use::System => use_system = true,
+                        other => uses.push(other),
+                    }
+                }
 
-                    use_system = true;
+                Token::Pub => {
+                    self.advance();
+
+                    match self.peek() {
+                        Token::Use => {
+                            self.advance();
+                            uses.push(self.parse_use_path()?);
+                        }
+
+                        _ => self.parse_decl(true, &mut functions, &mut globals)?,
+                    }
                 }
 
                 Token::Void | Token::Int | Token::Float | Token::Str => {
-                    functions.push(self.parse_function()?);
+                    self.parse_decl(false, &mut functions, &mut globals)?;
+                }
+
+                Token::Mut => {
+                    self.advance();
+
+                    let var_type = self.parse_type()?;
+                    let name = self.expect_ident()?;
+
+                    self.expect(&Token::Equals)?;
+
+                    let value = self.expr()?;
+
+                    self.skip_semi();
+
+                    globals.push(GlobalVar {
+                        pub_: false,
+                        var_type,
+                        name,
+                        value,
+                    });
                 }
 
                 Token::Eof => break,
 
-                t => bail!("expected function declaration, got {t}"),
+                t => bail!("expected declaration, got {t}"),
             }
         }
 
         Ok(Program {
             use_system,
+            uses,
             functions,
+            globals,
         })
     }
 
-    fn parse_function(&mut self) -> Result<Function> {
-        let return_type = self.parse_type()?;
+    fn parse_decl(
+        &mut self,
+        pub_: bool,
+        functions: &mut Vec<Function>,
+        globals: &mut Vec<GlobalVar>,
+    ) -> Result<()> {
+        let var_type = self.parse_type()?;
         let name = self.expect_ident()?;
 
-        self.expect(&Token::LParen)?;
+        if matches!(self.peek(), Token::LParen) {
+            self.expect(&Token::LParen)?;
 
-        let mut params = Vec::new();
+            let mut params = Vec::new();
 
-        while !matches!(self.peek(), Token::RParen) {
-            if !params.is_empty() {
-                self.expect(&Token::Comma)?;
+            while !matches!(self.peek(), Token::RParen) {
+                if !params.is_empty() {
+                    self.expect(&Token::Comma)?;
+                }
+
+                params.push(self.parse_param()?);
             }
 
-            params.push(self.parse_param()?);
+            self.expect(&Token::RParen)?;
+            self.expect(&Token::Colon)?;
+
+            let body = self.parse_block()?;
+
+            functions.push(Function {
+                pub_,
+                return_type: var_type,
+                name,
+                params,
+                body,
+            });
+        } else {
+            self.expect(&Token::Equals)?;
+
+            let value = self.expr()?;
+
+            self.skip_semi();
+            globals.push(GlobalVar {
+                pub_,
+                var_type,
+                name,
+                value,
+            });
         }
 
-        self.expect(&Token::RParen)?;
-        self.expect(&Token::Colon)?;
+        Ok(())
+    }
 
-        let body = self.parse_block()?;
+    fn parse_use_path(&mut self) -> Result<Use> {
+        let mut path = vec![self.expect_ident()?];
 
-        Ok(Function {
-            return_type,
-            name,
-            params,
-            body,
-        })
+        while matches!(self.peek(), Token::ColonColon) {
+            self.advance();
+
+            if matches!(self.peek(), Token::Star) {
+                self.advance();
+                self.expect(&Token::Semi)?;
+
+                return Ok(Use::Wildcard(path));
+            }
+
+            path.push(self.expect_ident()?);
+        }
+
+        self.expect(&Token::Semi)?;
+
+        if path.len() == 1 && path[0] == "System" {
+            Ok(Use::System)
+        } else {
+            Ok(Use::Module(path))
+        }
+    }
+
+    fn parse_mut_opt(&mut self) -> bool {
+        if matches!(self.peek(), Token::Mut) {
+            self.advance();
+            true
+        } else {
+            false
+        }
     }
 
     fn parse_param(&mut self) -> Result<Param> {
+        let mut_ = self.parse_mut_opt();
         let param_type = self.parse_type()?;
         let name = self.expect_ident()?;
 
-        Ok(Param { param_type, name })
+        Ok(Param {
+            mut_,
+            param_type,
+            name,
+        })
     }
 
     fn parse_type(&mut self) -> Result<FllufType> {
@@ -171,38 +270,52 @@ impl Parser {
 
             Token::If => self.parse_if(),
 
-            Token::Int | Token::Float | Token::Void | Token::Str => self.parse_var_decl(),
+            Token::Mut | Token::Int | Token::Float | Token::Void | Token::Str => {
+                let mut_ = self.parse_mut_opt();
+                let var_type = self.parse_type()?;
+                let name = self.expect_ident()?;
 
-            _ => {
+                self.expect(&Token::Equals)?;
+
                 let value = self.expr()?;
 
                 self.skip_semi();
 
-                Ok(Stmt::Expr(value))
+                Ok(Stmt::VarDecl {
+                    mut_,
+                    var_type,
+                    name,
+                    value,
+                })
+            }
+
+            _ => {
+                let e = self.expr()?;
+
+                if matches!(self.peek(), Token::Equals) {
+                    match e {
+                        Expr::Variable(name) => {
+                            self.advance();
+
+                            let value = self.expr()?;
+
+                            self.skip_semi();
+
+                            Ok(Stmt::Assign { name, value })
+                        }
+
+                        _ => bail!("left-hand side of assignment must be a variable"),
+                    }
+                } else {
+                    self.skip_semi();
+                    Ok(Stmt::Expr(e))
+                }
             }
         }
     }
 
-    fn parse_var_decl(&mut self) -> Result<Stmt> {
-        let var_type = self.parse_type()?;
-        let name = self.expect_ident()?;
-
-        self.expect(&Token::Equals)?;
-
-        let value = self.expr()?;
-
-        self.skip_semi();
-
-        Ok(Stmt::VarDecl {
-            var_type,
-            name,
-            value,
-        })
-    }
-
     fn parse_if(&mut self) -> Result<Stmt> {
         self.advance();
-
         self.expect(&Token::LParen)?;
 
         let cond = self.expr()?;
@@ -220,7 +333,6 @@ impl Parser {
 
             if matches!(self.peek(), Token::If) {
                 self.advance();
-
                 self.expect(&Token::LParen)?;
 
                 let cond = self.expr()?;
@@ -231,7 +343,6 @@ impl Parser {
                 else_ifs.push((cond, self.parse_block()?));
             } else {
                 self.expect(&Token::Colon)?;
-
                 else_block = Some(self.parse_block()?);
 
                 break;
@@ -360,42 +471,32 @@ impl Parser {
                 Ok(e)
             }
 
-            Token::Ident(name) => {
-                self.advance();
+            Token::Ident(_) => {
+                let name = self.expect_ident()?;
 
                 if matches!(self.peek(), Token::LParen) {
                     let args = self.args()?;
-
                     Ok(Expr::Call(name, args))
                 } else if matches!(self.peek(), Token::ColonColon) {
                     self.advance();
 
-                    let func = self.ident_or_keyword();
-                    let args = self.args()?;
+                    let second = match self.advance() {
+                        Token::Ident(s) => s,
+                        t => bail!("expected identifier after ::, got {t}"),
+                    };
 
-                    Ok(Expr::ModuleCall(name, func, args))
+                    if matches!(self.peek(), Token::LParen) {
+                        let args = self.args()?;
+                        Ok(Expr::ModuleCall(name, second, args))
+                    } else {
+                        Ok(Expr::ModuleVar(name, second))
+                    }
                 } else {
                     Ok(Expr::Variable(name))
                 }
             }
 
             t => bail!("unexpected {t}"),
-        }
-    }
-
-    fn ident_or_keyword(&mut self) -> String {
-        match self.advance() {
-            Token::Ident(s) => s,
-            Token::If => "if".to_string(),
-            Token::Else => "else".to_string(),
-            Token::Return => "return".to_string(),
-            Token::Use => "use".to_string(),
-            Token::Void => "void".to_string(),
-            Token::Int => "int".to_string(),
-            Token::Float => "float".to_string(),
-            Token::Str => "string".to_string(),
-
-            t => panic!("expected name, got {t}"),
         }
     }
 }

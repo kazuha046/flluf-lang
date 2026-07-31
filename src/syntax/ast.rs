@@ -1,4 +1,11 @@
 #[derive(Debug, Clone, PartialEq)]
+pub enum Use {
+    System,
+    Module(Vec<String>),
+    Wildcard(Vec<String>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum FllufType {
     Int,
     Float,
@@ -17,35 +24,52 @@ impl std::fmt::Display for FllufType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Program {
     pub use_system: bool,
+    pub uses: Vec<Use>,
     pub functions: Vec<Function>,
+    pub globals: Vec<GlobalVar>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Function {
+    pub pub_: bool,
     pub return_type: FllufType,
     pub name: String,
     pub params: Vec<Param>,
     pub body: Block,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Param {
+    pub mut_: bool,
     pub param_type: FllufType,
     pub name: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+pub struct GlobalVar {
+    pub pub_: bool,
+    pub var_type: FllufType,
+    pub name: String,
+    pub value: Expr,
+}
+
+#[derive(Debug, Clone)]
 pub struct Block {
     pub statements: Vec<Stmt>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Stmt {
     VarDecl {
+        mut_: bool,
         var_type: FllufType,
+        name: String,
+        value: Expr,
+    },
+    Assign {
         name: String,
         value: Expr,
     },
@@ -68,6 +92,7 @@ pub enum Expr {
     BinaryOp(Box<Expr>, BinOp, Box<Expr>),
     Call(String, Vec<Expr>),
     ModuleCall(String, String, Vec<Expr>),
+    ModuleVar(String, String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

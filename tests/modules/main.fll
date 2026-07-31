@@ -1,0 +1,12 @@
+use logger;
+use tests::*;
+
+void Main():
+{
+	logger::Calc(2, 3);
+
+	tests::Re("test fox");
+	tests::Some();
+
+	Log(tests::s);
+}

@@ -1,4 +1,5 @@
 use crate::codegen::*;
+use crate::resolver::ModuleResolver;
 use crate::syntax::ast::{Expr, FllufType};
 use anyhow::{Result, bail};
 use cranelift::codegen::ir::types;
@@ -66,7 +67,6 @@ impl Compiler {
         let mut ctx = DataDescription::new();
 
         ctx.define(bytes.into());
-
         self.module.define_data(id, &ctx).unwrap();
 
         let gv = self.module.declare_data_in_func(id, b.func);
@@ -96,20 +96,17 @@ impl Compiler {
         expr: &Expr,
         b: &mut FunctionBuilder,
         vars: &mut VarMap,
-        use_system: bool,
+        resolver: &ModuleResolver,
     ) -> Result<Option<TypedValue>> {
         match expr {
             Expr::Call(name, args) if name == "Exit" => {
-                let tv = self.compile_expr(b, vars, &args[0], use_system)?;
-
+                let tv = self.compile_expr(b, vars, &args[0], resolver)?;
                 Ok(Some(tv))
             }
-
             Expr::ModuleCall(mod_name, func_name, args)
                 if mod_name == "System" && func_name == "Exit" =>
             {
-                let tv = self.compile_expr(b, vars, &args[0], use_system)?;
-
+                let tv = self.compile_expr(b, vars, &args[0], resolver)?;
                 Ok(Some(tv))
             }
 

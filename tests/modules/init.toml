@@ -1,0 +1,3 @@
+[package]
+name = "flluf-modules" # It'll be a name of binary
+version = "1.0.0" # It'll be just for metadata

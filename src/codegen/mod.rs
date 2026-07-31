@@ -1,5 +1,5 @@
-use crate::syntax::ast::Program;
-use anyhow::Result;
+use crate::resolver::ModuleResolver;
+use anyhow::{Result, bail};
 use cranelift::codegen::ir::entities::StackSlot;
 use cranelift::codegen::settings;
 
@@ -15,7 +15,7 @@ pub use types::{
     widen,
 };
 
-pub type VarMap = std::collections::HashMap<String, (StackSlot, Tag)>;
+pub type VarMap = std::collections::HashMap<String, (StackSlot, Tag, bool)>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Tag {
@@ -34,11 +34,11 @@ pub struct Compiler {
     pub imports: std::collections::HashSet<String>,
 }
 
-pub fn compile(program: &Program) -> Result<Vec<u8>> {
-    let has_main = program.functions.iter().any(|f| f.name == "Main");
+pub fn compile(resolver: &ModuleResolver) -> Result<Vec<u8>> {
+    let has_main = resolver.all_functions.iter().any(|(n, _)| n == "main");
 
     if !has_main {
-        anyhow::bail!("program must have a 'Main' function");
+        bail!("program must have a 'Main' function");
     }
 
     let isa_builder = cranelift_native::builder()
@@ -64,7 +64,7 @@ pub fn compile(program: &Program) -> Result<Vec<u8>> {
         imports: std::collections::HashSet::new(),
     };
 
-    comp.compile_program(program)?;
+    comp.compile_program(resolver)?;
 
     let product = comp.module.finish();
     let data = product.emit().map_err(|e| anyhow::anyhow!("emit: {e}"))?;

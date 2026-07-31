@@ -1,6 +1,7 @@
 use crate::codegen::*;
-use crate::syntax::ast::Stmt;
-use anyhow::Result;
+use crate::resolver::ModuleResolver;
+use crate::syntax::ast::{FllufType, Stmt};
+use anyhow::{Result, bail};
 use cranelift::codegen::ir::types;
 use cranelift::prelude::*;
 use cranelift_frontend::FunctionBuilder;
@@ -11,47 +12,70 @@ impl Compiler {
         b: &mut FunctionBuilder,
         vars: &mut VarMap,
         s: &Stmt,
-        use_system: bool,
+        resolver: &ModuleResolver,
+        return_type: &FllufType,
     ) -> Result<()> {
         match s {
             Stmt::VarDecl {
+                mut_,
                 var_type,
                 name,
                 value,
             } => {
                 let ir_ty = type_to_ir(var_type);
-
                 let slot = b.create_sized_stack_slot(StackSlotData::new(
                     StackSlotKind::ExplicitSlot,
                     ir_ty.bytes(),
                     0,
                 ));
 
-                let tv = self.compile_expr(b, vars, value, use_system)?;
+                let tv = self.compile_expr(b, vars, value, resolver)?;
                 let converted = self.convert_type(b, tv, var_type);
 
                 b.ins().stack_store(types::I64, converted, slot, 0);
 
                 let tag = tag_from_type(var_type);
 
-                vars.insert(name.clone(), (slot, tag));
+                vars.insert(name.clone(), (slot, tag, *mut_));
+            }
+
+            Stmt::Assign { name, value } => {
+                let &(slot, tag, mut_) = vars
+                    .get(name.as_str())
+                    .ok_or_else(|| anyhow::anyhow!("undefined variable `{name}`"))?;
+
+                if !mut_ {
+                    bail!("cannot assign to immutable variable `{name}`");
+                }
+
+                let tv = self.compile_expr(b, vars, value, resolver)?;
+                let ir_ty = type_to_ir_tag(tag);
+
+                let converted = match tv.tag {
+                    Tag::Float => b.ins().bitcast(types::I64, MemFlagsData::new(), tv.val),
+                    _ => tv.val,
+                };
+
+                b.ins().stack_store(ir_ty, converted, slot, 0);
             }
 
             Stmt::Return(value) => {
-                if let Some(tv) = self.detect_exit(value, b, vars, use_system)? {
+                if let Some(tv) = self.detect_exit(value, b, vars, resolver)? {
                     self.emit_exit(b, tv.val);
+                } else if *return_type == FllufType::Void {
+                    self.compile_expr(b, vars, value, resolver)?;
+                    b.ins().return_(&[]);
                 } else {
-                    let tv = self.compile_expr(b, vars, value, use_system)?;
-
+                    let tv = self.compile_expr(b, vars, value, resolver)?;
                     b.ins().return_(&[tv.val]);
                 }
             }
 
             Stmt::Expr(value) => {
-                if let Some(tv) = self.detect_exit(value, b, vars, use_system)? {
+                if let Some(tv) = self.detect_exit(value, b, vars, resolver)? {
                     self.emit_exit(b, tv.val);
                 } else {
-                    self.compile_expr(b, vars, value, use_system)?;
+                    self.compile_expr(b, vars, value, resolver)?;
                 }
             }
 
@@ -62,7 +86,7 @@ impl Compiler {
                 else_block,
             } => {
                 let end = b.create_block();
-                let tv = self.compile_expr(b, vars, cond, use_system)?;
+                let tv = self.compile_expr(b, vars, cond, resolver)?;
                 let zero = b.ins().iconst(types::I64, 0);
                 let is_true = b.ins().icmp(IntCC::NotEqual, tv.val, zero);
 
@@ -75,7 +99,7 @@ impl Compiler {
                 b.seal_block(t_block);
 
                 for s in &then_block.statements {
-                    self.compile_stmt(b, vars, s, use_system)?;
+                    self.compile_stmt(b, vars, s, resolver, return_type)?;
                 }
 
                 if !self.block_has_terminator(b) {
@@ -88,7 +112,7 @@ impl Compiler {
                     b.switch_to_block(cur);
                     b.seal_block(cur);
 
-                    let tvc = self.compile_expr(b, vars, ec, use_system)?;
+                    let tvc = self.compile_expr(b, vars, ec, resolver)?;
                     let zero = b.ins().iconst(types::I64, 0);
                     let is_true = b.ins().icmp(IntCC::NotEqual, tvc.val, zero);
 
@@ -101,7 +125,7 @@ impl Compiler {
                     b.seal_block(tbn);
 
                     for s in &eb.statements {
-                        self.compile_stmt(b, vars, s, use_system)?;
+                        self.compile_stmt(b, vars, s, resolver, return_type)?;
                     }
 
                     if !self.block_has_terminator(b) {
@@ -116,7 +140,7 @@ impl Compiler {
 
                 if let Some(eb) = else_block {
                     for s in &eb.statements {
-                        self.compile_stmt(b, vars, s, use_system)?;
+                        self.compile_stmt(b, vars, s, resolver, return_type)?;
                     }
                 }
 

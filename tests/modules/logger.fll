@@ -1,0 +1,6 @@
+use System;
+
+pub void Calc(int x, int y):
+{
+	return Log(x + y);
+}
