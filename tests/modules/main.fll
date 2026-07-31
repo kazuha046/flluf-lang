@@ -1,4 +1,10 @@
-use logger;
+use System;
+
+use logger; // We also can `use logger::*;` or `use logger::FUNC_NAME;` or `use logger:{FUNC1, FUNC2}`
+// if `use logger::*;` so just Calc(2, 3);
+// if `use logger::FUNC_NAME;` so just FUNC_NAME(2, 3);
+// if `use logger:{FUNC1, FUNC2}` so just FUNC1(2, 3); and etc
+
 use tests::*;
 
 void Main():

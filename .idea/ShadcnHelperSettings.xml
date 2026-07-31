@@ -3138,6 +3138,66 @@
         <option name="homepage" value="https://www.atelier-ui.com" />
         <option name="urlTemplate" value="https://www.atelier-ui.com/r/{name}.json" />
       </RegistryConfigState>
+      <RegistryConfigState>
+        <option name="id" value="central-1st-pouf" />
+        <option name="name" value="1st-pouf" />
+        <option name="namespace" value="@1st-pouf" />
+        <option name="baseUrl" value="https://1st-pouf.worksonmy.dev/r" />
+        <option name="stylePath" value="/{name}.json" />
+        <option name="type" value="community" />
+        <option name="enabled" value="false" />
+        <option name="description" value="Puffy, pastel claymorphism components and app blocks for React, built with Tailwind CSS v4 and Radix UI." />
+        <option name="homepage" value="https://1st-pouf.worksonmy.dev" />
+        <option name="urlTemplate" value="https://1st-pouf.worksonmy.dev/r/{name}.json" />
+      </RegistryConfigState>
+      <RegistryConfigState>
+        <option name="id" value="central-liquefy-ui" />
+        <option name="name" value="Liquefy-ui" />
+        <option name="namespace" value="@liquefy-ui" />
+        <option name="baseUrl" value="https://liquefy-ui.com/r" />
+        <option name="stylePath" value="/{name}.json" />
+        <option name="type" value="community" />
+        <option name="enabled" value="false" />
+        <option name="description" value="Liquid Glass components for React: WebGL edge refraction and pointer-driven springs over accessible Base UI primitives. TypeScript, RSC-ready, with an MCP server." />
+        <option name="homepage" value="https://liquefy-ui.com" />
+        <option name="urlTemplate" value="https://liquefy-ui.com/r/{name}.json" />
+      </RegistryConfigState>
+      <RegistryConfigState>
+        <option name="id" value="central-mediadrop" />
+        <option name="name" value="Mediadrop" />
+        <option name="namespace" value="@mediadrop" />
+        <option name="baseUrl" value="https://www.mediadrop.dev/r" />
+        <option name="stylePath" value="/{name}.json" />
+        <option name="type" value="community" />
+        <option name="enabled" value="false" />
+        <option name="description" value="Drag-and-drop file upload blocks for React built on react-mediadrop — dropzone, avatar uploader, multi-file upload form, and direct-to-S3 upload." />
+        <option name="homepage" value="https://www.mediadrop.dev" />
+        <option name="urlTemplate" value="https://www.mediadrop.dev/r/{name}.json" />
+      </RegistryConfigState>
+      <RegistryConfigState>
+        <option name="id" value="central-ai2" />
+        <option name="name" value="Ai2" />
+        <option name="namespace" value="@ai2" />
+        <option name="baseUrl" value="https://ai2.design/r" />
+        <option name="stylePath" value="/{name}.json" />
+        <option name="type" value="community" />
+        <option name="enabled" value="false" />
+        <option name="description" value="Agent-native design system for the shadcn CLI: 51 base components with a full variant, tone and size matrix on an OKLCH token layer, plus 307 styled variations. MIT." />
+        <option name="homepage" value="https://ai2.design" />
+        <option name="urlTemplate" value="https://ai2.design/r/{name}.json" />
+      </RegistryConfigState>
+      <RegistryConfigState>
+        <option name="id" value="central-whiskeyjack" />
+        <option name="name" value="Whiskeyjack" />
+        <option name="namespace" value="@whiskeyjack" />
+        <option name="baseUrl" value="https://whiskeyjack.net/r" />
+        <option name="stylePath" value="/{name}.json" />
+        <option name="type" value="community" />
+        <option name="enabled" value="false" />
+        <option name="description" value="A Tauri-first design system: thumb-first components with Metro-style pivot navigation, frosted bottom nav, and tap-again confirmations, on a CSS-variable token pipeline. Hardened across nine shipping apps before extraction." />
+        <option name="homepage" value="https://whiskeyjack.net" />
+        <option name="urlTemplate" value="https://whiskeyjack.net/r/{name}.json" />
+      </RegistryConfigState>
     </registryConfigs>
   </component>
 </project>

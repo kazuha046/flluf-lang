@@ -104,12 +104,18 @@ impl Compiler {
 
     pub fn compile_function(
         &mut self,
-        _mangled: &str,
+        mangled: &str,
         func: &Function,
         id: FuncId,
         ctx: &mut FunctionBuilderContext,
         resolver: &ModuleResolver,
     ) -> Result<()> {
+        self.use_system = resolver
+            .function_system
+            .get(mangled)
+            .copied()
+            .unwrap_or(false);
+
         let mut data = self.module.make_context();
 
         let sig = self

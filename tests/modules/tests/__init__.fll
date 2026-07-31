@@ -1,10 +1,12 @@
 use System; // We dont need `use System;` in all modules who imports here cuz it imports here
 
 pub use reassignment::*; // Import module
-//pub use reassignment::Re; // Also can be
-//pub use reassignment::{Re, Do}; // Also can be
+//pub use reassignment::Re; // Also can be BUT NOT SIMULTANEOUSLY WITH SAME IMPORT LIKE ::*.
+//pub use reassignment::{Re, Do}; // Also can be BUT NOT SIMULTANEOUSLY WITH SAME IMPORT LIKE ::*.
+// That's means we can't SIMULTANEOUSLY pub use reassignment::{Re, Do}; and  pub use reassignment::*; and //pub use reassignment::Re; or etc.
 
 //pub use reassignment; // If we wanna type all path in main.fll
+// main.fll
 // (use tests::reassignment::*) so we need call func as tests::Do();
 // or
 // (use tests::*) so we need call func as reassignment::Do();

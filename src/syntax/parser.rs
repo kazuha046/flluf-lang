@@ -89,7 +89,11 @@ impl Parser {
                     match self.peek() {
                         Token::Use => {
                             self.advance();
-                            uses.push(self.parse_use_path()?);
+
+                            match mark_pub(self.parse_use_path()?) {
+                                Use::System => use_system = true,
+                                other => uses.push(other),
+                            }
                         }
 
                         _ => self.parse_decl(true, &mut functions, &mut globals)?,
@@ -188,25 +192,58 @@ impl Parser {
     fn parse_use_path(&mut self) -> Result<Use> {
         let mut path = vec![self.expect_ident()?];
 
-        while matches!(self.peek(), Token::ColonColon) {
+        while let Token::ColonColon | Token::Colon = self.peek() {
             self.advance();
 
-            if matches!(self.peek(), Token::Star) {
-                self.advance();
-                self.expect(&Token::Semi)?;
+            match self.peek() {
+                Token::Star => {
+                    self.advance();
+                    self.expect(&Token::Semi)?;
 
-                return Ok(Use::Wildcard(path));
+                    return Ok(Use::Wildcard { pub_: false, path });
+                }
+
+                Token::LBrace => {
+                    self.advance();
+
+                    let mut names = Vec::new();
+
+                    while !matches!(self.peek(), Token::RBrace) {
+                        if !names.is_empty() {
+                            self.expect(&Token::Comma)?;
+                        }
+
+                        names.push(self.expect_ident()?);
+                    }
+
+                    self.expect(&Token::RBrace)?;
+                    self.expect(&Token::Semi)?;
+
+                    return Ok(Use::Items {
+                        pub_: false,
+                        path,
+                        names,
+                    });
+                }
+
+                _ => path.push(self.expect_ident()?),
             }
-
-            path.push(self.expect_ident()?);
         }
 
         self.expect(&Token::Semi)?;
 
         if path.len() == 1 && path[0] == "System" {
             Ok(Use::System)
+        } else if path.len() == 1 {
+            Ok(Use::Module { pub_: false, path })
         } else {
-            Ok(Use::Module(path))
+            let name = path.pop().unwrap();
+
+            Ok(Use::Item {
+                pub_: false,
+                path,
+                name,
+            })
         }
     }
 
@@ -498,5 +535,24 @@ impl Parser {
 
             t => bail!("unexpected {t}"),
         }
+    }
+}
+
+fn mark_pub(u: Use) -> Use {
+    match u {
+        Use::Module { path, .. } => Use::Module { pub_: true, path },
+        Use::Wildcard { path, .. } => Use::Wildcard { pub_: true, path },
+        Use::Item { path, name, .. } => Use::Item {
+            pub_: true,
+            path,
+            name,
+        },
+        Use::Items { path, names, .. } => Use::Items {
+            pub_: true,
+            path,
+            names,
+        },
+
+        u => u,
     }
 }

@@ -55,7 +55,7 @@ impl Compiler {
             }
 
             Expr::Call(name, args) if name == "Log" => {
-                if !resolver.use_system {
+                if !self.use_system {
                     bail!("'Log' requires 'use System;'");
                 }
 
@@ -239,6 +239,19 @@ impl Compiler {
                 }
 
                 _ => bail!("`{name}` is not a function"),
+            }
+        } else if let Some(resolved) = resolver.func_map.get(name) {
+            match self.module.get_name(resolved) {
+                Some(cranelift_module::FuncOrDataId::Func(id)) => {
+                    let decl = self.module.declarations().get_function_decl(id);
+
+                    let params: Vec<_> =
+                        decl.signature.params.iter().map(|p| p.value_type).collect();
+
+                    (id, params)
+                }
+
+                _ => bail!("`{name}` resolves to an unknown function"),
             }
         } else {
             let mut sig = self.module.make_signature();

@@ -1,8 +1,24 @@
 #[derive(Debug, Clone, PartialEq)]
 pub enum Use {
     System,
-    Module(Vec<String>),
-    Wildcard(Vec<String>),
+    Module {
+        pub_: bool,
+        path: Vec<String>,
+    },
+    Wildcard {
+        pub_: bool,
+        path: Vec<String>,
+    },
+    Item {
+        pub_: bool,
+        path: Vec<String>,
+        name: String,
+    },
+    Items {
+        pub_: bool,
+        path: Vec<String>,
+        names: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
