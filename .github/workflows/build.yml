@@ -20,13 +20,13 @@ jobs:
             target: x86_64-unknown-linux-gnu
             artifact_name: flluf-linux-amd64
             asset_name: flluf-linux-amd64
-            binary_path: target/release/flluf
+            binary_path: target/x86_64-unknown-linux-gnu/release/flluf
 
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: flluf-windows-amd64
             asset_name: flluf-windows-amd64.exe
-            binary_path: target/release/flluf.exe
+            binary_path: target/x86_64-pc-windows-msvc/release/flluf.exe
 
     steps:
       - name: 🛎 Checkout repo
