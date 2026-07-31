@@ -1,6 +1,6 @@
 use crate::codegen::*;
 use crate::resolver::ModuleResolver;
-use crate::syntax::ast::{BinOp, Expr};
+use crate::syntax::ast::{BinOp, Expr, FllufType};
 use anyhow::{Result, bail};
 use cranelift::codegen::ir::types;
 use cranelift::prelude::*;
@@ -50,34 +50,21 @@ impl Compiler {
 
             Expr::BinaryOp(l, op, r) => self.compile_binop(b, vars, l, *op, r, resolver),
 
-            Expr::Call(name, _) if name == "Exit" => {
-                bail!("'Exit' cannot be used as an expression");
-            }
-
             Expr::Call(name, args) if name == "Log" => {
-                if !self.use_system {
-                    bail!("'Log' requires 'use System;'");
-                }
-
-                self.compile_log(b, vars, args, resolver)
+                self.compile_log(b, vars, name, args, resolver)
             }
 
             Expr::Call(name, args) => self.compile_call(b, vars, name, args, resolver),
 
             Expr::ModuleCall(mod_name, func_name, args) => {
-                if mod_name == "System" && func_name == "Exit" {
-                    bail!("'Exit' cannot be used as an expression");
-                } else if mod_name == "System" && func_name == "Log" {
-                    self.compile_log(b, vars, args, resolver)
+                let key = format!("{}::{}", mod_name, func_name);
+
+                if mod_name == "System" && func_name == "Log" {
+                    self.compile_log(b, vars, &key, args, resolver)
+                } else if !resolver.func_map.contains_key(&key) {
+                    bail!("unknown function `{key}`");
                 } else {
-                    let key = format!("{}::{}", mod_name, func_name);
-
-                    let mangled = resolver
-                        .func_map
-                        .get(&key)
-                        .ok_or_else(|| anyhow::anyhow!("unknown function `{key}`"))?;
-
-                    self.compile_call(b, vars, mangled, args, resolver)
+                    self.compile_call(b, vars, &key, args, resolver)
                 }
             }
 
@@ -171,54 +158,6 @@ impl Compiler {
         }
     }
 
-    pub fn compile_log(
-        &mut self,
-        b: &mut FunctionBuilder,
-        vars: &mut VarMap,
-        args: &[Expr],
-        resolver: &ModuleResolver,
-    ) -> Result<TypedValue> {
-        let tv = self.compile_expr(b, vars, &args[0], resolver)?;
-
-        #[cfg(not(target_os = "windows"))]
-        return self.compile_log_inner(b, tv);
-
-        #[cfg(target_os = "windows")]
-        self.compile_log_win(b, tv)
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    fn compile_log_inner(&mut self, b: &mut FunctionBuilder, tv: TypedValue) -> Result<TypedValue> {
-        let fmt_str = match tv.tag {
-            Tag::Int => "%lld\n\0",
-            Tag::Float => "%f\n\0",
-            Tag::Ptr => "%s\n\0",
-        };
-
-        let fmt_ptr = self.store_string(b, fmt_str);
-
-        let val = match tv.tag {
-            Tag::Float => b.ins().bitcast(types::I64, MemFlagsData::new(), tv.val),
-            _ => tv.val,
-        };
-
-        let mut sig = self.module.make_signature();
-
-        sig.params.push(AbiParam::new(types::I64));
-        sig.params.push(AbiParam::new(types::I64));
-        sig.returns.push(AbiParam::new(types::I64));
-
-        let printf_id = self.import("printf", &sig);
-        let printf_ref = self.module.declare_func_in_func(printf_id, b.func);
-
-        b.ins().call(printf_ref, &[fmt_ptr, val]);
-
-        Ok(TypedValue {
-            val: tv.val,
-            tag: tv.tag,
-        })
-    }
-
     pub fn compile_call(
         &mut self,
         b: &mut FunctionBuilder,
@@ -227,7 +166,45 @@ impl Compiler {
         args: &[Expr],
         resolver: &ModuleResolver,
     ) -> Result<TypedValue> {
-        let (id, expected) = if let Some(fod) = self.module.get_name(name) {
+        let (tv, _) = self.compile_call_inner(b, vars, name, args, resolver)?;
+
+        Ok(tv)
+    }
+
+    fn compile_log(
+        &mut self,
+        b: &mut FunctionBuilder,
+        vars: &mut VarMap,
+        name: &str,
+        args: &[Expr],
+        resolver: &ModuleResolver,
+    ) -> Result<TypedValue> {
+        let (_, compiled) = self.compile_call_inner(b, vars, name, args, resolver)?;
+
+        Ok(compiled.into_iter().next().unwrap_or(TypedValue {
+            val: b.ins().iconst(types::I64, 0),
+            tag: Tag::Int,
+        }))
+    }
+
+    fn compile_call_inner(
+        &mut self,
+        b: &mut FunctionBuilder,
+        vars: &mut VarMap,
+        name: &str,
+        args: &[Expr],
+        resolver: &ModuleResolver,
+    ) -> Result<(TypedValue, Vec<TypedValue>)> {
+        let mut compiled = Vec::with_capacity(args.len());
+        let mut tags = Vec::with_capacity(args.len());
+
+        for a in args {
+            let tv = self.compile_expr(b, vars, a, resolver)?;
+            tags.push(tv.tag);
+            compiled.push(tv);
+        }
+
+        let target = if let Some(fod) = self.module.get_name(name) {
             match fod {
                 cranelift_module::FuncOrDataId::Func(id) => {
                     let decl = self.module.declarations().get_function_decl(id);
@@ -235,30 +212,74 @@ impl Compiler {
                     let params: Vec<_> =
                         decl.signature.params.iter().map(|p| p.value_type).collect();
 
-                    (id, params)
+                    (id, params, resolver.return_types.get(name).cloned())
                 }
 
                 _ => bail!("`{name}` is not a function"),
             }
-        } else if let Some(resolved) = resolver.func_map.get(name) {
-            match self.module.get_name(resolved) {
-                Some(cranelift_module::FuncOrDataId::Func(id)) => {
-                    let decl = self.module.declarations().get_function_decl(id);
+        } else if let Some(candidates) = resolver.func_map.get(name) {
+            let (id, params, ret_ty) = if candidates.len() == 1 {
+                let (mangled, _) = &candidates[0];
 
-                    let params: Vec<_> =
-                        decl.signature.params.iter().map(|p| p.value_type).collect();
+                let id = match self.module.get_name(mangled) {
+                    Some(cranelift_module::FuncOrDataId::Func(id)) => id,
+                    _ => bail!("`{name}` resolves to an unknown function"),
+                };
 
-                    (id, params)
+                let decl = self.module.declarations().get_function_decl(id);
+
+                (
+                    id,
+                    decl.signature.params.iter().map(|p| p.value_type).collect(),
+                    resolver.return_types.get(mangled).cloned(),
+                )
+            } else {
+                let matches: Vec<_> = candidates
+                    .iter()
+                    .filter(|(_, params)| {
+                        params.len() == tags.len()
+                            && params.iter().zip(&tags).all(|(t, tag)| {
+                                let want = match tag {
+                                    Tag::Int => FllufType::Int,
+                                    Tag::Float => FllufType::Float,
+                                    Tag::Ptr => FllufType::String,
+                                };
+
+                                t == &want
+                            })
+                    })
+                    .collect();
+
+                match matches.len() {
+                    0 => bail!("no overload of `{name}` matches the arguments"),
+                    1 => {
+                        let (mangled, _) = matches[0];
+
+                        let id = match self.module.get_name(mangled) {
+                            Some(cranelift_module::FuncOrDataId::Func(id)) => id,
+                            _ => bail!("`{name}` resolves to an unknown function"),
+                        };
+
+                        let decl = self.module.declarations().get_function_decl(id);
+
+                        (
+                            id,
+                            decl.signature.params.iter().map(|p| p.value_type).collect(),
+                            resolver.return_types.get(mangled).cloned(),
+                        )
+                    }
+
+                    _ => bail!("ambiguous call to `{name}`"),
                 }
+            };
 
-                _ => bail!("`{name}` resolves to an unknown function"),
-            }
+            (id, params, ret_ty)
+        } else if resolver.func_map.contains_key(&format!("System::{name}")) {
+            bail!("'{name}' requires 'use System;'");
         } else {
             let mut sig = self.module.make_signature();
 
-            for a in args {
-                let tv = self.compile_expr(b, vars, a, resolver)?;
-
+            for tv in &compiled {
                 sig.params
                     .push(AbiParam::new(b.func.dfg.value_type(tv.val)));
             }
@@ -268,17 +289,18 @@ impl Compiler {
             let id = self.import(name, &sig);
             let params: Vec<_> = sig.params.iter().map(|p| p.value_type).collect();
 
-            (id, params)
+            (id, params, None)
         };
 
-        let mut compiled = Vec::new();
+        let (id, expected, ret_ty) = target;
 
-        for (i, a) in args.iter().enumerate() {
-            let tv = self.compile_expr(b, vars, a, resolver)?;
+        let mut call_args = Vec::with_capacity(compiled.len());
+
+        for (i, tv) in compiled.iter().enumerate() {
             let val_ty = b.func.dfg.value_type(tv.val);
             let exp = expected.get(i).copied().unwrap_or(val_ty);
 
-            compiled.push(match (val_ty, exp) {
+            call_args.push(match (val_ty, exp) {
                 (types::I64, types::F64) => b.ins().fcvt_from_sint(types::F64, tv.val),
                 (types::F64, types::I64) => b.ins().fcvt_to_sint(types::I64, tv.val),
                 _ => tv.val,
@@ -286,7 +308,7 @@ impl Compiler {
         }
 
         let func_ref = self.module.declare_func_in_func(id, b.func);
-        let call = b.ins().call(func_ref, &compiled);
+        let call = b.ins().call(func_ref, &call_args);
         let results = b.inst_results(call);
 
         let val = if results.is_empty() {
@@ -295,7 +317,14 @@ impl Compiler {
             results[0]
         };
 
-        Ok(TypedValue { val, tag: Tag::Int })
+        let tag = match ret_ty {
+            Some(FllufType::Float) => Tag::Float,
+            Some(FllufType::String) => Tag::Ptr,
+
+            _ => Tag::Int,
+        };
+
+        Ok((TypedValue { val, tag }, compiled))
     }
 
     pub fn load_global(&mut self, b: &mut FunctionBuilder, mangled: &str) -> Value {

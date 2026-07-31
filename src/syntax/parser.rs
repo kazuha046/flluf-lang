@@ -66,7 +66,6 @@ impl Parser {
     }
 
     pub fn parse(&mut self) -> Result<Program> {
-        let mut use_system = false;
         let mut uses = Vec::new();
         let mut functions = Vec::new();
         let mut globals = Vec::new();
@@ -75,12 +74,7 @@ impl Parser {
             match self.peek() {
                 Token::Use => {
                     self.advance();
-                    let u = self.parse_use_path()?;
-
-                    match u {
-                        Use::System => use_system = true,
-                        other => uses.push(other),
-                    }
+                    uses.push(self.parse_use_path()?);
                 }
 
                 Token::Pub => {
@@ -89,11 +83,7 @@ impl Parser {
                     match self.peek() {
                         Token::Use => {
                             self.advance();
-
-                            match mark_pub(self.parse_use_path()?) {
-                                Use::System => use_system = true,
-                                other => uses.push(other),
-                            }
+                            uses.push(mark_pub(self.parse_use_path()?));
                         }
 
                         _ => self.parse_decl(true, &mut functions, &mut globals)?,
@@ -131,7 +121,6 @@ impl Parser {
         }
 
         Ok(Program {
-            use_system,
             uses,
             functions,
             globals,
@@ -232,9 +221,7 @@ impl Parser {
 
         self.expect(&Token::Semi)?;
 
-        if path.len() == 1 && path[0] == "System" {
-            Ok(Use::System)
-        } else if path.len() == 1 {
+        if path.len() == 1 {
             Ok(Use::Module { pub_: false, path })
         } else {
             let name = path.pop().unwrap();
@@ -552,7 +539,5 @@ fn mark_pub(u: Use) -> Use {
             path,
             names,
         },
-
-        u => u,
     }
 }

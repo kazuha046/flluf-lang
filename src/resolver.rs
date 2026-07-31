@@ -5,18 +5,21 @@ use anyhow::{Context, Result, bail};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+pub type FuncMap = HashMap<String, Vec<(String, Vec<FllufType>)>>;
+
+const SYSTEM_SRC: &str = include_str!("modules/System.fll");
+
 pub struct ModuleResolver {
     pub all_functions: Vec<(String, Function)>,
     pub all_globals: Vec<(String, GlobalVar)>,
-    pub func_map: HashMap<String, String>,
+    pub func_map: FuncMap,
     pub global_map: HashMap<String, String>,
-    pub function_system: HashMap<String, bool>,
+    pub return_types: HashMap<String, FllufType>,
 }
 
 struct ParsedModule {
     program: Program,
     dir: PathBuf,
-    is_init: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -25,6 +28,7 @@ enum Export {
         name: String,
         mangled: String,
         src_mp: Vec<String>,
+        params: Vec<FllufType>,
     },
     Global {
         name: String,
@@ -64,7 +68,14 @@ impl ModuleResolver {
             ParsedModule {
                 program: entry_prog,
                 dir: input_dir.to_path_buf(),
-                is_init: false,
+            },
+        );
+
+        modules.insert(
+            vec!["System".to_string()],
+            ParsedModule {
+                program: parse_src(SYSTEM_SRC)?,
+                dir: PathBuf::new(),
             },
         );
 
@@ -83,7 +94,6 @@ impl ModuleResolver {
 
             for u in &uses {
                 let path = match u {
-                    Use::System => continue,
                     Use::Module { path, .. }
                     | Use::Wildcard { path, .. }
                     | Use::Item { path, .. }
@@ -91,7 +101,12 @@ impl ModuleResolver {
                 };
 
                 let base_dir = modules.get(&mp).unwrap().dir.clone();
-                let mut prefix = mp.clone();
+                
+                let mut prefix = if path.first().map(String::as_str) == Some("System") {
+                    Vec::new()
+                } else {
+                    mp.clone()
+                };
 
                 for (i, seg) in path.iter().enumerate() {
                     prefix.push(seg.clone());
@@ -104,7 +119,7 @@ impl ModuleResolver {
                     let file_path = search_dir.join(format!("{}.fll", seg));
                     let init_path = search_dir.join(seg).join("__init__.fll");
 
-                    let (found_path, is_init) = if file_path.is_file() {
+                    let (found_path, _is_init) = if file_path.is_file() {
                         (file_path, false)
                     } else if init_path.is_file() {
                         (init_path, true)
@@ -123,14 +138,7 @@ impl ModuleResolver {
                     let prog = parse_src(&src)?;
                     let dir = found_path.parent().unwrap().to_path_buf();
 
-                    modules.insert(
-                        prefix.clone(),
-                        ParsedModule {
-                            program: prog,
-                            dir,
-                            is_init,
-                        },
-                    );
+                    modules.insert(prefix.clone(), ParsedModule { program: prog, dir });
 
                     work.push(prefix.clone());
                 }
@@ -152,10 +160,33 @@ impl ModuleResolver {
 
             let mut exports = Vec::new();
 
+            let mut name_counts: HashMap<&str, usize> = HashMap::new();
+
             for f in &pm.program.functions {
                 if f.pub_ || mp.is_empty() {
+                    *name_counts.entry(f.name.as_str()).or_insert(0) += 1;
+                }
+            }
+
+            for f in &pm.program.functions {
+                if f.pub_ || mp.is_empty() {
+                    let params: Vec<FllufType> =
+                        f.params.iter().map(|p| p.param_type.clone()).collect();
+
                     let mangled = if mp.is_empty() && f.name == "Main" {
                         "main".to_string()
+                    } else if name_counts.get(f.name.as_str()).copied().unwrap_or(0) > 1 {
+                        let suffix: Vec<_> = params
+                            .iter()
+                            .map(|t| match t {
+                                FllufType::Int => "int",
+                                FllufType::Float => "float",
+                                FllufType::String => "string",
+                                FllufType::Void => "void",
+                            })
+                            .collect();
+
+                        format!("{}{}__{}", prefix, f.name, suffix.join("_"))
                     } else {
                         format!("{}{}", prefix, f.name)
                     };
@@ -164,6 +195,7 @@ impl ModuleResolver {
                         name: f.name.clone(),
                         mangled,
                         src_mp: mp.clone(),
+                        params,
                     });
                 }
             }
@@ -194,8 +226,7 @@ impl ModuleResolver {
                 for u in &pm.program.uses {
                     match u {
                         Use::Module { pub_: true, path } => {
-                            let mut target = mp.clone();
-                            target.extend(path.iter().cloned());
+                            let target = use_target(mp, path);
 
                             let name = path.last().unwrap().clone();
 
@@ -210,8 +241,7 @@ impl ModuleResolver {
                         }
 
                         Use::Wildcard { pub_: true, path } => {
-                            let mut target = mp.clone();
-                            target.extend(path.iter().cloned());
+                            let target = use_target(mp, path);
 
                             if let Some(target_exports) = module_exports.get(&target).cloned() {
                                 for e in target_exports {
@@ -235,9 +265,12 @@ impl ModuleResolver {
                             }
                         }
 
-                        Use::Item { pub_: true, path, name } => {
-                            let mut target = mp.clone();
-                            target.extend(path.iter().cloned());
+                        Use::Item {
+                            pub_: true,
+                            path,
+                            name,
+                        } => {
+                            let target = use_target(mp, path);
 
                             if let Some(e) = module_exports
                                 .get(&target)
@@ -263,9 +296,12 @@ impl ModuleResolver {
                             }
                         }
 
-                        Use::Items { pub_: true, path, names } => {
-                            let mut target = mp.clone();
-                            target.extend(path.iter().cloned());
+                        Use::Items {
+                            pub_: true,
+                            path,
+                            names,
+                        } => {
+                            let target = use_target(mp, path);
 
                             if let Some(target_exports) = module_exports.get(&target) {
                                 for name in names {
@@ -325,14 +361,20 @@ impl ModuleResolver {
                         name,
                         mangled,
                         src_mp,
+                        params,
                     } => {
                         if func_seen.insert(mangled.clone()) {
-                            let f = find_function(name, src_mp, &modules);
+                            let f = find_function(name, params, src_mp, &modules);
                             all_functions.push((mangled.clone(), f));
                         }
 
                         if !module_ns.is_empty() {
-                            func_map.insert(format!("{}::{}", module_ns, name), mangled.clone());
+                            insert_func(
+                                &mut func_map,
+                                format!("{}::{}", module_ns, name),
+                                mangled.clone(),
+                                params.clone(),
+                            );
                         }
                     }
 
@@ -364,8 +406,7 @@ impl ModuleResolver {
             for u in &pm.program.uses {
                 match u {
                     Use::Wildcard { path, .. } => {
-                        let mut target = mp.clone();
-                        target.extend(path.iter().cloned());
+                        let target = use_target(mp, path);
 
                         if let Some(target_exports) = module_exports.get(&target) {
                             let parent_ns = if target.len() <= 1 {
@@ -376,28 +417,54 @@ impl ModuleResolver {
 
                             for e in target_exports {
                                 match e {
-                                    Export::Func { name, mangled, .. } => {
-                                        func_map.insert(ns_key(&parent_ns, name), mangled.clone());
+                                    Export::Func {
+                                        name,
+                                        mangled,
+                                        params,
+                                        ..
+                                    } => {
+                                        insert_func(
+                                            &mut func_map,
+                                            ns_key(&parent_ns, name),
+                                            mangled.clone(),
+                                            params.clone(),
+                                        );
                                     }
 
                                     Export::Global { name, mangled, .. } => {
-                                        global_map.insert(ns_key(&parent_ns, name), mangled.clone());
+                                        global_map
+                                            .insert(ns_key(&parent_ns, name), mangled.clone());
                                     }
 
                                     Export::Module { name, target: t } => {
                                         if let Some(member_exports) = module_exports.get(t) {
                                             for me in member_exports {
                                                 match me {
-                                                    Export::Func { name: mn, mangled, .. } => {
-                                                        func_map.insert(
-                                                            ns_key(&parent_ns, &format!("{}::{}", name, mn)),
+                                                    Export::Func {
+                                                        name: mn,
+                                                        mangled,
+                                                        params,
+                                                        ..
+                                                    } => {
+                                                        insert_func(
+                                                            &mut func_map,
+                                                            ns_key(
+                                                                &parent_ns,
+                                                                &format!("{}::{}", name, mn),
+                                                            ),
                                                             mangled.clone(),
+                                                            params.clone(),
                                                         );
                                                     }
 
-                                                    Export::Global { name: mn, mangled, .. } => {
+                                                    Export::Global {
+                                                        name: mn, mangled, ..
+                                                    } => {
                                                         global_map.insert(
-                                                            ns_key(&parent_ns, &format!("{}::{}", name, mn)),
+                                                            ns_key(
+                                                                &parent_ns,
+                                                                &format!("{}::{}", name, mn),
+                                                            ),
                                                             mangled.clone(),
                                                         );
                                                     }
@@ -412,9 +479,38 @@ impl ModuleResolver {
                         }
                     }
 
+                    Use::Module { path, pub_ } if !pub_ || mp.is_empty() => {
+                        let target = use_target(mp, path);
+
+                        if let Some(target_exports) = module_exports.get(&target) {
+                            for e in target_exports {
+                                match e {
+                                    Export::Func {
+                                        name,
+                                        mangled,
+                                        params,
+                                        ..
+                                    } => {
+                                        insert_func(
+                                            &mut func_map,
+                                            name.clone(),
+                                            mangled.clone(),
+                                            params.clone(),
+                                        );
+                                    }
+
+                                    Export::Global { name, mangled, .. } => {
+                                        global_map.insert(name.clone(), mangled.clone());
+                                    }
+
+                                    Export::Module { .. } => {}
+                                }
+                            }
+                        }
+                    }
+
                     Use::Item { path, name, pub_ } if !pub_ || mp.is_empty() => {
-                        let mut target = mp.clone();
-                        target.extend(path.iter().cloned());
+                        let target = use_target(mp, path);
 
                         if let Some(e) = module_exports
                             .get(&target)
@@ -422,8 +518,15 @@ impl ModuleResolver {
                             .cloned()
                         {
                             match e {
-                                Export::Func { mangled, .. } => {
-                                    func_map.insert(name.clone(), mangled);
+                                Export::Func {
+                                    mangled, params, ..
+                                } => {
+                                    insert_func(
+                                        &mut func_map,
+                                        name.clone(),
+                                        mangled,
+                                        params.clone(),
+                                    );
                                 }
 
                                 Export::Global { mangled, .. } => {
@@ -436,8 +539,7 @@ impl ModuleResolver {
                     }
 
                     Use::Items { path, names, pub_ } if !pub_ || mp.is_empty() => {
-                        let mut target = mp.clone();
-                        target.extend(path.iter().cloned());
+                        let target = use_target(mp, path);
 
                         if let Some(target_exports) = module_exports.get(&target) {
                             for name in names {
@@ -445,8 +547,15 @@ impl ModuleResolver {
                                     target_exports.iter().find(|e| e.name() == name).cloned()
                                 {
                                     match e {
-                                        Export::Func { mangled, .. } => {
-                                            func_map.insert(name.clone(), mangled);
+                                        Export::Func {
+                                            mangled, params, ..
+                                        } => {
+                                            insert_func(
+                                                &mut func_map,
+                                                name.clone(),
+                                                mangled,
+                                                params.clone(),
+                                            );
                                         }
 
                                         Export::Global { mangled, .. } => {
@@ -465,29 +574,17 @@ impl ModuleResolver {
             }
         }
 
-        let sys_map = compute_sys_map(&modules);
-        let mut function_system = HashMap::new();
-
-        for exports in module_exports.values() {
-            for e in exports {
-                if let Export::Func {
-                    mangled,
-                    src_mp,
-                    ..
-                } = e
-                {
-                    let has = sys_map.get(src_mp).copied().unwrap_or(false);
-                    function_system.insert(mangled.clone(), has);
-                }
-            }
-        }
+        let return_types = all_functions
+            .iter()
+            .map(|(mangled, f)| (mangled.clone(), f.return_type.clone()))
+            .collect();
 
         Ok(ModuleResolver {
             all_functions,
             all_globals,
             func_map,
             global_map,
-            function_system,
+            return_types,
         })
     }
 }
@@ -535,50 +632,37 @@ fn ns_key(parent_ns: &str, name: &str) -> String {
     }
 }
 
-fn compute_sys_map(modules: &HashMap<Vec<String>, ParsedModule>) -> HashMap<Vec<String>, bool> {
-    let mut memo = HashMap::new();
-
-    let keys: Vec<Vec<String>> = modules.keys().cloned().collect();
-
-    for mp in &keys {
-        compute_sys(mp, modules, &mut memo);
+fn use_target(mp: &[String], path: &[String]) -> Vec<String> {
+    if path.first().map(String::as_str) == Some("System") {
+        path.to_vec()
+    } else {
+        let mut target = mp.to_vec();
+        target.extend(path.iter().cloned());
+        target
     }
-
-    memo
 }
 
-fn compute_sys(
-    mp: &[String],
-    modules: &HashMap<Vec<String>, ParsedModule>,
-    memo: &mut HashMap<Vec<String>, bool>,
-) -> bool {
-    if let Some(v) = memo.get(mp) {
-        return *v;
+fn insert_func(func_map: &mut FuncMap, key: String, mangled: String, params: Vec<FllufType>) {
+    let e = func_map.entry(key).or_default();
+
+    if !e.iter().any(|(m, _)| *m == mangled) {
+        e.push((mangled, params));
     }
-
-    let pm = modules.get(mp).unwrap();
-    let mut v = pm.program.use_system;
-
-    if !pm.is_init && mp.len() > 1 {
-        let pkg = mp[..mp.len() - 1].to_vec();
-
-        if modules.get(&pkg).is_some_and(|p| p.is_init) {
-            v = v || compute_sys(&pkg, modules, memo);
-        }
-    }    memo.insert(mp.to_vec(), v);
-
-    v
 }
 
 fn find_function(
     name: &str,
+    params: &[FllufType],
     mod_path: &[String],
     modules: &HashMap<Vec<String>, ParsedModule>,
 ) -> Function {
     let pm = modules.get(mod_path).unwrap();
 
     for f in &pm.program.functions {
-        if f.name == name {
+        if f.name == name
+            && f.params.len() == params.len()
+            && f.params.iter().zip(params).all(|(p, t)| &p.param_type == t)
+        {
             return f.clone();
         }
     }

@@ -110,12 +110,6 @@ impl Compiler {
         ctx: &mut FunctionBuilderContext,
         resolver: &ModuleResolver,
     ) -> Result<()> {
-        self.use_system = resolver
-            .function_system
-            .get(mangled)
-            .copied()
-            .unwrap_or(false);
-
         let mut data = self.module.make_context();
 
         let sig = self
@@ -153,8 +147,21 @@ impl Compiler {
             vars.insert(p.name.clone(), (slot, tag, p.mut_));
         }
 
+        let is_main = mangled == "main";
+
         for s in &func.body.statements {
-            self.compile_stmt(&mut builder, &mut vars, s, resolver, &func.return_type)?;
+            if self.block_has_terminator(&builder) {
+                break;
+            }
+
+            self.compile_stmt(
+                &mut builder,
+                &mut vars,
+                s,
+                resolver,
+                &func.return_type,
+                is_main,
+            )?;
         }
 
         if !self.block_has_terminator(&builder) {

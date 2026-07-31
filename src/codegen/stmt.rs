@@ -14,6 +14,7 @@ impl Compiler {
         s: &Stmt,
         resolver: &ModuleResolver,
         return_type: &FllufType,
+        is_main: bool,
     ) -> Result<()> {
         match s {
             Stmt::VarDecl {
@@ -60,11 +61,15 @@ impl Compiler {
             }
 
             Stmt::Return(value) => {
-                if let Some(tv) = self.detect_exit(value, b, vars, resolver)? {
-                    self.emit_exit(b, tv.val);
-                } else if *return_type == FllufType::Void {
+                if *return_type == FllufType::Void {
                     self.compile_expr(b, vars, value, resolver)?;
-                    b.ins().return_(&[]);
+
+                    if is_main {
+                        let z = b.ins().iconst(types::I64, 0);
+                        b.ins().return_(&[z]);
+                    } else {
+                        b.ins().return_(&[]);
+                    }
                 } else {
                     let tv = self.compile_expr(b, vars, value, resolver)?;
                     b.ins().return_(&[tv.val]);
@@ -72,11 +77,7 @@ impl Compiler {
             }
 
             Stmt::Expr(value) => {
-                if let Some(tv) = self.detect_exit(value, b, vars, resolver)? {
-                    self.emit_exit(b, tv.val);
-                } else {
-                    self.compile_expr(b, vars, value, resolver)?;
-                }
+                self.compile_expr(b, vars, value, resolver)?;
             }
 
             Stmt::If {
@@ -99,7 +100,7 @@ impl Compiler {
                 b.seal_block(t_block);
 
                 for s in &then_block.statements {
-                    self.compile_stmt(b, vars, s, resolver, return_type)?;
+                    self.compile_stmt(b, vars, s, resolver, return_type, is_main)?;
                 }
 
                 if !self.block_has_terminator(b) {
@@ -125,7 +126,7 @@ impl Compiler {
                     b.seal_block(tbn);
 
                     for s in &eb.statements {
-                        self.compile_stmt(b, vars, s, resolver, return_type)?;
+                        self.compile_stmt(b, vars, s, resolver, return_type, is_main)?;
                     }
 
                     if !self.block_has_terminator(b) {
@@ -140,7 +141,7 @@ impl Compiler {
 
                 if let Some(eb) = else_block {
                     for s in &eb.statements {
-                        self.compile_stmt(b, vars, s, resolver, return_type)?;
+                        self.compile_stmt(b, vars, s, resolver, return_type, is_main)?;
                     }
                 }
 

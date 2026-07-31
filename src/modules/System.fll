@@ -1,0 +1,19 @@
+pub void Log(int value):
+{
+	__flluf_log_i64(value);
+}
+
+pub void Log(float value):
+{
+	__flluf_log_f64(value);
+}
+
+pub void Log(string value):
+{
+	__flluf_log_ptr(value);
+}
+
+pub void Exit(int code):
+{
+	__flluf_exit(code);
+}

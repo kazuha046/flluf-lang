@@ -1,6 +1,5 @@
 #[derive(Debug, Clone, PartialEq)]
 pub enum Use {
-    System,
     Module {
         pub_: bool,
         path: Vec<String>,
@@ -42,7 +41,6 @@ impl std::fmt::Display for FllufType {
 
 #[derive(Debug, Clone)]
 pub struct Program {
-    pub use_system: bool,
     pub uses: Vec<Use>,
     pub functions: Vec<Function>,
     pub globals: Vec<GlobalVar>,

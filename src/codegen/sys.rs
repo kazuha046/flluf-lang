@@ -1,6 +1,5 @@
 use crate::codegen::*;
-use crate::resolver::ModuleResolver;
-use crate::syntax::ast::{Expr, FllufType};
+use crate::syntax::ast::FllufType;
 use anyhow::{Result, bail};
 use cranelift::codegen::ir::types;
 use cranelift::prelude::*;
@@ -72,45 +71,5 @@ impl Compiler {
         let gv = self.module.declare_data_in_func(id, b.func);
 
         b.ins().symbol_value(types::I64, gv)
-    }
-
-    pub fn emit_exit(&mut self, b: &mut FunctionBuilder, arg: Value) {
-        let mut sig = self.module.make_signature();
-
-        sig.params.push(AbiParam::new(types::I64));
-
-        #[cfg(not(target_os = "windows"))]
-        let name = "exit";
-
-        #[cfg(target_os = "windows")]
-        let name = "ExitProcess";
-
-        let id = self.import(name, &sig);
-        let func_ref = self.module.declare_func_in_func(id, b.func);
-
-        b.ins().call(func_ref, &[arg]);
-    }
-
-    pub fn detect_exit(
-        &mut self,
-        expr: &Expr,
-        b: &mut FunctionBuilder,
-        vars: &mut VarMap,
-        resolver: &ModuleResolver,
-    ) -> Result<Option<TypedValue>> {
-        match expr {
-            Expr::Call(name, args) if name == "Exit" => {
-                let tv = self.compile_expr(b, vars, &args[0], resolver)?;
-                Ok(Some(tv))
-            }
-            Expr::ModuleCall(mod_name, func_name, args)
-                if mod_name == "System" && func_name == "Exit" =>
-            {
-                let tv = self.compile_expr(b, vars, &args[0], resolver)?;
-                Ok(Some(tv))
-            }
-
-            _ => Ok(None),
-        }
     }
 }

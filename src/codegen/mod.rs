@@ -5,7 +5,6 @@ use cranelift::codegen::settings;
 
 pub mod compile;
 pub mod expr;
-pub mod log_win;
 pub mod stmt;
 pub mod sys;
 pub mod types;
@@ -32,7 +31,6 @@ pub struct TypedValue {
 pub struct Compiler {
     pub module: cranelift_object::ObjectModule,
     pub imports: std::collections::HashSet<String>,
-    pub use_system: bool,
 }
 
 pub fn compile(resolver: &ModuleResolver) -> Result<Vec<u8>> {
@@ -63,7 +61,6 @@ pub fn compile(resolver: &ModuleResolver) -> Result<Vec<u8>> {
     let mut comp = Compiler {
         module,
         imports: std::collections::HashSet::new(),
-        use_system: false,
     };
 
     comp.compile_program(resolver)?;
