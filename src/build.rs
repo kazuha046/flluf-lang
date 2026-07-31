@@ -1,7 +1,57 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
+fn project_name(entry: &Path) -> Option<String> {
+    let root = crate::resolver::find_project_root(entry);
+    let src = std::fs::read_to_string(root.join("init.toml")).ok()?;
+
+    let mut in_package = false;
+
+    for line in src.lines() {
+        let line = line.trim();
+
+        if line.starts_with('[') {
+            in_package = line.starts_with("[package]");
+            continue;
+        }
+
+        if in_package
+            && let Some(rest) = line.strip_prefix("name")
+            && rest.trim_start().starts_with('=')
+        {
+            let value = rest
+                .split_once('=')
+                .map(|(_, v)| v)
+                .unwrap_or("")
+                .split('#')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .trim_matches('"')
+                .trim();
+
+            if !value.is_empty() {
+                return Some(value.to_string());
+            }
+        }
+    }
+
+    None
+}
+
 pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf> {
+    let input = if input.is_dir() {
+        let main = input.join("main.fll");
+
+        if !main.is_file() {
+            anyhow::bail!("no `main.fll` found in {}", input.display());
+        }
+
+        main
+    } else {
+        input.to_path_buf()
+    };
+
     let cwd = PathBuf::from(".");
     let parent = input.parent().unwrap_or(&cwd);
     let target = parent.join("target");
@@ -13,11 +63,12 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf> {
 
     #[cfg(target_os = "windows")]
     let (obj_ext, exe_ext) = (".obj", ".exe");
+
     #[cfg(not(target_os = "windows"))]
     let (obj_ext, exe_ext) = (".o", "");
 
     let obj_path = build_dir.join(format!("{stem}{obj_ext}"));
-    let resolver = crate::resolver::ModuleResolver::resolve(input)?;
+    let resolver = crate::resolver::ModuleResolver::resolve(&input)?;
 
     let obj_data = crate::codegen::compile(&resolver)
         .with_context(|| format!("failed to compile {}", input.display()))?;
@@ -26,7 +77,13 @@ pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf> {
         .with_context(|| format!("write {}", obj_path.display()))?;
 
     let exe_path = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
-        let name = format!("{stem}{exe_ext}");
+        let name = if stem == "main" {
+            project_name(&input).unwrap_or_else(|| "main".to_string())
+        } else {
+            stem.to_string()
+        };
+
+        let name = format!("{name}{exe_ext}");
         target.join(name)
     });
 

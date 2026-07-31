@@ -101,7 +101,7 @@ impl ModuleResolver {
                 };
 
                 let base_dir = modules.get(&mp).unwrap().dir.clone();
-                
+
                 let mut prefix = if path.first().map(String::as_str) == Some("System") {
                     Vec::new()
                 } else {
@@ -368,14 +368,13 @@ impl ModuleResolver {
                             all_functions.push((mangled.clone(), f));
                         }
 
-                        if !module_ns.is_empty() {
-                            insert_func(
-                                &mut func_map,
-                                format!("{}::{}", module_ns, name),
-                                mangled.clone(),
-                                params.clone(),
-                            );
-                        }
+                        let key = if module_ns.is_empty() {
+                            name.clone()
+                        } else {
+                            format!("{}::{}", module_ns, name)
+                        };
+
+                        insert_func(&mut func_map, key, mangled.clone(), params.clone());
                     }
 
                     Export::Global {
@@ -599,7 +598,7 @@ fn resolve_search_dir(module_dir: &Path, path: &[String]) -> PathBuf {
     dir
 }
 
-fn find_project_root(input: &Path) -> PathBuf {
+pub(crate) fn find_project_root(input: &Path) -> PathBuf {
     let mut dir = input
         .parent()
         .map(|p| p.to_path_buf())

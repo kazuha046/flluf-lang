@@ -15,4 +15,26 @@ void Main():
 	tests::Some();
 
 	Log(tests::s);
+
+	Test();
+	Test("bon");
+	Test(3);
+}
+
+void Test(string a):
+{
+	Log("Test 1");
+	Log(a);
+}
+
+void Test(int n):
+{
+	Log("Test 2");
+	Log(n);
+}
+
+void Test():
+{
+	Log("Test 3");
+	Log("no");
 }
