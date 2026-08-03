@@ -1,0 +1,13 @@
+[book]
+title = "flluf — a compiled language"
+authors = ["kazuha046"]
+description = "Documentation for flluf, a minimal compiled language written in Rust with a Cranelift backend"
+language = "en"
+
+[build]
+create-missing = false
+
+[output.html]
+git-repository-url = "https://github.com/kazuha046/flluf-lang"
+edit-url-template = "https://github.com/kazuha046/flluf-lang/edit/main/docs/src/{path}"
+additional-css = ["theme/custom.css"]

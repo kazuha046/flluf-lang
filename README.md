@@ -20,13 +20,13 @@ use System;
 
 string greet(string name):
 {
-  return "hello, " + name;
+ return name;
 }
 
 void Main():
 {
-  Log(greet("world"));
-  return Exit(0);
+ Log(greet("world"));
+ return Exit(0);
 }
 ```
 
@@ -56,12 +56,12 @@ Functions are declared with `returnType name(params):` followed by a block.
 ```
 int Add(int a, int b):
 {
-    return a + b;
+  return a + b;
 }
 
 void Main():
 {
-    Log(Add(2, 3));
+  Log(Add(2, 3));
 }
 ```
 
@@ -70,15 +70,15 @@ void Main():
 ```
 if (x > 0):
 {
-    Log(x);
+  Log(x);
 }
 else if (x == 0):
 {
-    Log(0);
+  Log(0);
 }
 else:
 {
-    Log(-1);
+  Log(-1);
 }
 ```
 
@@ -90,7 +90,7 @@ Comparison operators: `==`, `!=`, `<`, `>`, `<=`, `>=`.
 a + b   a - b   a * b   a / b
 ```
 
-`int` and `float` can be mixed — `int` is promoted to `float`.
+Both operands of an arithmetic expression must be the same type (`int` or `float`); mixing them is a compile error.
 
 ## Built-in functions
 
@@ -102,11 +102,13 @@ Without `use System;` you must write `System::Log(...)`. With `use System;` you 
 
 ### `Exit(code)` / `System::Exit(code)`
 
-Terminates the program. On non-zero exit code, `exit code N` is printed to stderr.
+Terminates the program with the given status code. `0` means success, any
+non-zero value means failure. After the program finishes, `flluf run` prints
+`program exited with code N` and itself exits with the same status code.
 
 ```
-return Exit(0);     // clean exit
-return Exit(1);     // stderr: exit code 1
+return Exit(0);     // success
+return Exit(1);     // failure; flluf exits with status 1
 ```
 
 ### `use System`
@@ -116,8 +118,8 @@ use System;
 
 void Main():
 {
-    Log(42);             // System:: not needed
-    System::Log("hmm");  // still works
+  Log(42);             // System:: not needed
+  System::Log("hmm");  // still works
 }
 ```
 
@@ -140,22 +142,48 @@ cargo build --release
 
 Requires Rust 1.85+ and gcc/cc.
 
+## Documentation
+
+The full language documentation is built with [mdBook](https://rust-lang.github.io/mdBook/):
+
+```
+cargo install mdbook
+mdbook serve docs
+```
+
+It is hosted on GitHub Pages at <https://kazuha046.github.io/flluf-lang/>.
+
 ## Project structure
 
 ```
 src/
-├── main.rs           # CLI, C runtime, linker
+├── main.rs           # CLI entry point (build / run / new)
+├── cli.rs            # clap command definitions
+├── build.rs          # compile pipeline + project (init.toml) handling
+├── link.rs           # gcc / mingw linking
+├── runtime.c         # C runtime for Log and exit codes
+├── syntax/           # Frontend: lexer, parser, tokens, AST
+│   ├── mod.rs
+│   ├── ast.rs
+│   ├── lexer.rs
+│   ├── parser.rs
+│   └── token.rs
+├── resolver/         # Module loading, exports, use-scope resolution
+│   ├── mod.rs
+│   ├── load.rs
+│   ├── exports.rs
+│   └── scope.rs
 ├── codegen/          # Cranelift code generation
 │   ├── mod.rs
+│   ├── compile.rs
 │   ├── stmt.rs
-│   └── expr.rs
-└── syntax/           # Frontend
-    ├── ast.rs
-    ├── lexer.rs
-    ├── parser.rs
-    └── token.rs
+│   ├── expr.rs
+│   ├── sys.rs
+│   └── types.rs
+└── modules/          # Standard modules (System.fll)
 tests/
 └── flluf/            # Integration tests (.fll sources)
+└── modules/          # Multi-file project test
 ```
 
 ## License

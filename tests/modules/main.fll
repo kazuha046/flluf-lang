@@ -21,6 +21,10 @@ void Main():
 	Test(3);
 
 	Log(12 + 12 / 2);
+
+	float fl = 1;
+
+	Log(fl);
 }
 
 void Test(string a):

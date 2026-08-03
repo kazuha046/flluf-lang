@@ -170,16 +170,19 @@ fn exported_from(
 
         Use::Item { name, .. } => target_exports
             .iter()
-            .find(|e| e.name() == name)
-            .into_iter()
+            .filter(|e| e.name() == name)
             .cloned()
             .collect(),
 
-        Use::Items { names, .. } => names
-            .iter()
-            .filter_map(|n| target_exports.iter().find(|e| e.name() == n))
-            .cloned()
-            .collect(),
+        Use::Items { names, .. } => {
+            let mut out = Vec::new();
+
+            for n in names {
+                out.extend(target_exports.iter().filter(|e| e.name() == n).cloned());
+            }
+
+            out
+        }
     }
 }
 

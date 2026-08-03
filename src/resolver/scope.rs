@@ -200,12 +200,14 @@ fn apply_use(
         Use::Item { path, name, .. } => {
             let target = use_target(owner, path);
 
-            let e = module_exports
+            let exports = module_exports
                 .get(&target)
-                .and_then(|ex| ex.iter().find(|e| e.name() == name))
+                .filter(|ex| ex.iter().any(|e| e.name() == name))
                 .ok_or_else(|| not_exported(pm, line, name, &target))?;
 
-            add_export(ftable, gtable, name, e);
+            for e in exports.iter().filter(|e| e.name() == name) {
+                add_export(ftable, gtable, name, e);
+            }
         }
 
         Use::Items { path, names, .. } => {
@@ -216,12 +218,15 @@ fn apply_use(
                 .ok_or_else(|| module_not_found(pm, line, &target))?;
 
             for name in names {
-                let e = target_exports
-                    .iter()
-                    .find(|e| e.name() == name)
-                    .ok_or_else(|| not_exported(pm, line, name, &target))?;
+                let matching: Vec<_> = target_exports.iter().filter(|e| e.name() == name).collect();
 
-                add_export(ftable, gtable, name, e);
+                if matching.is_empty() {
+                    return Err(not_exported(pm, line, name, &target));
+                }
+
+                for e in matching {
+                    add_export(ftable, gtable, name, e);
+                }
             }
         }
     }

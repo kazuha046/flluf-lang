@@ -9,6 +9,8 @@
       <excludeFolder url="file://$MODULE_DIR$/tests/flluf/target" />
       <excludeFolder url="file://$MODULE_DIR$/.direnv" />
       <excludeFolder url="file://$MODULE_DIR$/tests/target" />
+      <excludeFolder url="file://$MODULE_DIR$/docs/book" />
+      <excludeFolder url="file://$MODULE_DIR$/tests/modules/target" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
