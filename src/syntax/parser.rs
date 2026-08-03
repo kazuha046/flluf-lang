@@ -1,23 +1,56 @@
+use crate::error::{Pos, render};
 use crate::syntax::ast::*;
 use crate::syntax::token::Token;
-use anyhow::{Result, bail};
+use anyhow::Result;
+use std::path::PathBuf;
 
 pub struct Parser {
-    tokens: Vec<Token>,
+    tokens: Vec<(Token, Pos)>,
     pos: usize,
+    file: PathBuf,
+    lines: Vec<String>,
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self {
-        Self { tokens, pos: 0 }
+    pub fn new(tokens: Vec<(Token, Pos)>, file: PathBuf, lines: Vec<String>) -> Self {
+        Self {
+            tokens,
+            pos: 0,
+            file,
+            lines,
+        }
     }
 
     fn peek(&self) -> &Token {
-        self.tokens.get(self.pos).unwrap_or(&Token::Eof)
+        self.tokens
+            .get(self.pos)
+            .map(|t| &t.0)
+            .unwrap_or(&Token::Eof)
+    }
+
+    fn pos(&self) -> Pos {
+        self.tokens
+            .get(self.pos)
+            .map(|t| t.1)
+            .or_else(|| self.tokens.last().map(|t| t.1))
+            .unwrap_or(Pos::new(0, 0))
+    }
+
+    fn err(&self, msg: impl std::fmt::Display) -> anyhow::Error {
+        anyhow::anyhow!(render(
+            &self.file,
+            self.pos(),
+            &msg.to_string(),
+            &self.lines
+        ))
     }
 
     fn advance(&mut self) -> Token {
-        let t = self.tokens.get(self.pos).cloned().unwrap_or(Token::Eof);
+        let t = self
+            .tokens
+            .get(self.pos)
+            .map(|t| t.0.clone())
+            .unwrap_or(Token::Eof);
 
         self.pos += 1;
 
@@ -28,7 +61,7 @@ impl Parser {
         let t = self.advance();
 
         if std::mem::discriminant(&t) != std::mem::discriminant(expected) {
-            bail!("expected {expected}, got {t}");
+            return Err(self.err(format!("expected {expected}, got {t}")));
         }
 
         Ok(t)
@@ -37,13 +70,7 @@ impl Parser {
     fn expect_ident(&mut self) -> Result<String> {
         match self.advance() {
             Token::Ident(s) => Ok(s),
-            t => bail!("expected identifier, got {t}"),
-        }
-    }
-
-    fn skip_semi(&mut self) {
-        if matches!(self.peek(), Token::Semi) {
-            self.advance();
+            t => Err(self.err(format!("expected identifier, got {t}"))),
         }
     }
 
@@ -73,8 +100,9 @@ impl Parser {
         loop {
             match self.peek() {
                 Token::Use => {
+                    let line = self.pos().line;
                     self.advance();
-                    uses.push(self.parse_use_path()?);
+                    uses.push(self.parse_use_path(line)?);
                 }
 
                 Token::Pub => {
@@ -82,8 +110,9 @@ impl Parser {
 
                     match self.peek() {
                         Token::Use => {
+                            let line = self.pos().line;
                             self.advance();
-                            uses.push(mark_pub(self.parse_use_path()?));
+                            uses.push(mark_pub(self.parse_use_path(line)?));
                         }
 
                         _ => self.parse_decl(true, &mut functions, &mut globals)?,
@@ -104,7 +133,7 @@ impl Parser {
 
                     let value = self.expr()?;
 
-                    self.skip_semi();
+                    self.expect(&Token::Semi)?;
 
                     globals.push(GlobalVar {
                         pub_: false,
@@ -116,7 +145,7 @@ impl Parser {
 
                 Token::Eof => break,
 
-                t => bail!("expected declaration, got {t}"),
+                t => return Err(self.err(format!("expected declaration, got {t}"))),
             }
         }
 
@@ -133,6 +162,7 @@ impl Parser {
         functions: &mut Vec<Function>,
         globals: &mut Vec<GlobalVar>,
     ) -> Result<()> {
+        let line = self.pos().line;
         let var_type = self.parse_type()?;
         let name = self.expect_ident()?;
 
@@ -160,13 +190,15 @@ impl Parser {
                 name,
                 params,
                 body,
+                line,
             });
         } else {
             self.expect(&Token::Equals)?;
 
             let value = self.expr()?;
 
-            self.skip_semi();
+            self.expect(&Token::Semi)?;
+
             globals.push(GlobalVar {
                 pub_,
                 var_type,
@@ -178,7 +210,7 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_use_path(&mut self) -> Result<Use> {
+    fn parse_use_path(&mut self, line: usize) -> Result<Use> {
         let mut path = vec![self.expect_ident()?];
 
         while let Token::ColonColon | Token::Colon = self.peek() {
@@ -189,7 +221,11 @@ impl Parser {
                     self.advance();
                     self.expect(&Token::Semi)?;
 
-                    return Ok(Use::Wildcard { pub_: false, path });
+                    return Ok(Use::Wildcard {
+                        pub_: false,
+                        path,
+                        line,
+                    });
                 }
 
                 Token::LBrace => {
@@ -212,6 +248,7 @@ impl Parser {
                         pub_: false,
                         path,
                         names,
+                        line,
                     });
                 }
 
@@ -222,7 +259,11 @@ impl Parser {
         self.expect(&Token::Semi)?;
 
         if path.len() == 1 {
-            Ok(Use::Module { pub_: false, path })
+            Ok(Use::Module {
+                pub_: false,
+                path,
+                line,
+            })
         } else {
             let name = path.pop().unwrap();
 
@@ -230,6 +271,7 @@ impl Parser {
                 pub_: false,
                 path,
                 name,
+                line,
             })
         }
     }
@@ -262,7 +304,7 @@ impl Parser {
             Token::Void => Ok(FllufType::Void),
             Token::Str => Ok(FllufType::String),
 
-            t => bail!("expected type (int/float/void/string), got {t}"),
+            t => Err(self.err(format!("expected type (int/float/void/string), got {t}"))),
         }
     }
 
@@ -283,18 +325,20 @@ impl Parser {
     fn parse_stmt(&mut self) -> Result<Stmt> {
         match self.peek() {
             Token::Return => {
+                let line = self.pos().line;
                 self.advance();
 
                 let value = self.expr()?;
 
-                self.skip_semi();
+                self.expect(&Token::Semi)?;
 
-                Ok(Stmt::Return(value))
+                Ok(Stmt::Return(value, line))
             }
 
             Token::If => self.parse_if(),
 
             Token::Mut | Token::Int | Token::Float | Token::Void | Token::Str => {
+                let line = self.pos().line;
                 let mut_ = self.parse_mut_opt();
                 let var_type = self.parse_type()?;
                 let name = self.expect_ident()?;
@@ -303,36 +347,38 @@ impl Parser {
 
                 let value = self.expr()?;
 
-                self.skip_semi();
+                self.expect(&Token::Semi)?;
 
                 Ok(Stmt::VarDecl {
                     mut_,
                     var_type,
                     name,
                     value,
+                    line,
                 })
             }
 
             _ => {
+                let line = self.pos().line;
                 let e = self.expr()?;
 
                 if matches!(self.peek(), Token::Equals) {
                     match e {
-                        Expr::Variable(name) => {
+                        Expr::Variable(name, _) => {
                             self.advance();
 
                             let value = self.expr()?;
 
-                            self.skip_semi();
+                            self.expect(&Token::Semi)?;
 
-                            Ok(Stmt::Assign { name, value })
+                            Ok(Stmt::Assign { name, value, line })
                         }
 
-                        _ => bail!("left-hand side of assignment must be a variable"),
+                        _ => Err(self.err("left-hand side of assignment must be a variable")),
                     }
                 } else {
-                    self.skip_semi();
-                    Ok(Stmt::Expr(e))
+                    self.expect(&Token::Semi)?;
+                    Ok(Stmt::Expr(e, line))
                 }
             }
         }
@@ -367,6 +413,7 @@ impl Parser {
                 else_ifs.push((cond, self.parse_block()?));
             } else {
                 self.expect(&Token::Colon)?;
+
                 else_block = Some(self.parse_block()?);
 
                 break;
@@ -390,35 +437,23 @@ impl Parser {
 
         loop {
             let op = match self.peek() {
-                Token::Eq => {
-                    self.advance();
-                    BinOp::Eq
-                }
-                Token::Ne => {
-                    self.advance();
-                    BinOp::Ne
-                }
-                Token::Lt => {
-                    self.advance();
-                    BinOp::Lt
-                }
-                Token::Gt => {
-                    self.advance();
-                    BinOp::Gt
-                }
-                Token::Le => {
-                    self.advance();
-                    BinOp::Le
-                }
-                Token::Ge => {
-                    self.advance();
-                    BinOp::Ge
-                }
+                Token::Eq => BinOp::Eq,
+                Token::Ne => BinOp::Ne,
+                Token::Lt => BinOp::Lt,
+                Token::Gt => BinOp::Gt,
+                Token::Le => BinOp::Le,
+                Token::Ge => BinOp::Ge,
 
                 _ => break,
             };
 
-            left = Expr::BinaryOp(Box::new(left), op, Box::new(self.parse_add()?));
+            let line = self.pos().line;
+
+            self.advance();
+
+            let right = self.parse_add()?;
+
+            left = Expr::BinaryOp(Box::new(left), op, Box::new(right), line);
         }
 
         Ok(left)
@@ -429,19 +464,19 @@ impl Parser {
 
         loop {
             let op = match self.peek() {
-                Token::Plus => {
-                    self.advance();
-                    BinOp::Add
-                }
-                Token::Minus => {
-                    self.advance();
-                    BinOp::Sub
-                }
+                Token::Plus => BinOp::Add,
+                Token::Minus => BinOp::Sub,
 
                 _ => break,
             };
 
-            left = Expr::BinaryOp(Box::new(left), op, Box::new(self.parse_mul()?));
+            let line = self.pos().line;
+
+            self.advance();
+
+            let right = self.parse_mul()?;
+
+            left = Expr::BinaryOp(Box::new(left), op, Box::new(right), line);
         }
 
         Ok(left)
@@ -452,34 +487,37 @@ impl Parser {
 
         loop {
             let op = match self.peek() {
-                Token::Star => {
-                    self.advance();
-                    BinOp::Mul
-                }
-                Token::Slash => {
-                    self.advance();
-                    BinOp::Div
-                }
+                Token::Star => BinOp::Mul,
+                Token::Slash => BinOp::Div,
 
                 _ => break,
             };
 
-            left = Expr::BinaryOp(Box::new(left), op, Box::new(self.parse_atom()?));
+            let line = self.pos().line;
+            self.advance();
+
+            let right = self.parse_atom()?;
+
+            left = Expr::BinaryOp(Box::new(left), op, Box::new(right), line);
         }
 
         Ok(left)
     }
 
     fn parse_atom(&mut self) -> Result<Expr> {
+        let line = self.pos().line;
+
         match self.peek().clone() {
             Token::Integer(n) => {
                 self.advance();
                 Ok(Expr::IntLit(n))
             }
+
             Token::FloatLit(n) => {
                 self.advance();
                 Ok(Expr::FloatLit(n))
             }
+
             Token::StringLit(s) => {
                 self.advance();
                 Ok(Expr::StringLit(s))
@@ -500,44 +538,60 @@ impl Parser {
 
                 if matches!(self.peek(), Token::LParen) {
                     let args = self.args()?;
-                    Ok(Expr::Call(name, args))
+                    Ok(Expr::Call(name, args, line))
                 } else if matches!(self.peek(), Token::ColonColon) {
                     self.advance();
 
                     let second = match self.advance() {
                         Token::Ident(s) => s,
-                        t => bail!("expected identifier after ::, got {t}"),
+                        t => {
+                            return Err(self.err(format!("expected identifier after ::, got {t}")));
+                        }
                     };
 
                     if matches!(self.peek(), Token::LParen) {
                         let args = self.args()?;
-                        Ok(Expr::ModuleCall(name, second, args))
+                        Ok(Expr::ModuleCall(name, second, args, line))
                     } else {
-                        Ok(Expr::ModuleVar(name, second))
+                        Ok(Expr::ModuleVar(name, second, line))
                     }
                 } else {
-                    Ok(Expr::Variable(name))
+                    Ok(Expr::Variable(name, line))
                 }
             }
 
-            t => bail!("unexpected {t}"),
+            t => Err(self.err(format!("unexpected {t}"))),
         }
     }
 }
 
 fn mark_pub(u: Use) -> Use {
     match u {
-        Use::Module { path, .. } => Use::Module { pub_: true, path },
-        Use::Wildcard { path, .. } => Use::Wildcard { pub_: true, path },
-        Use::Item { path, name, .. } => Use::Item {
+        Use::Module { path, line, .. } => Use::Module {
+            pub_: true,
+            path,
+            line,
+        },
+        Use::Wildcard { path, line, .. } => Use::Wildcard {
+            pub_: true,
+            path,
+            line,
+        },
+        Use::Item {
+            path, name, line, ..
+        } => Use::Item {
             pub_: true,
             path,
             name,
+            line,
         },
-        Use::Items { path, names, .. } => Use::Items {
+        Use::Items {
+            path, names, line, ..
+        } => Use::Items {
             pub_: true,
             path,
             names,
+            line,
         },
     }
 }

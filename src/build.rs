@@ -4,39 +4,13 @@ use std::path::{Path, PathBuf};
 fn project_name(entry: &Path) -> Option<String> {
     let root = crate::resolver::find_project_root(entry);
     let src = std::fs::read_to_string(root.join("init.toml")).ok()?;
+    let value: toml::Table = src.parse().ok()?;
 
-    let mut in_package = false;
-
-    for line in src.lines() {
-        let line = line.trim();
-
-        if line.starts_with('[') {
-            in_package = line.starts_with("[package]");
-            continue;
-        }
-
-        if in_package
-            && let Some(rest) = line.strip_prefix("name")
-            && rest.trim_start().starts_with('=')
-        {
-            let value = rest
-                .split_once('=')
-                .map(|(_, v)| v)
-                .unwrap_or("")
-                .split('#')
-                .next()
-                .unwrap_or("")
-                .trim()
-                .trim_matches('"')
-                .trim();
-
-            if !value.is_empty() {
-                return Some(value.to_string());
-            }
-        }
-    }
-
-    None
+    value
+        .get("package")
+        .and_then(|p| p.get("name"))
+        .and_then(|n| n.as_str())
+        .map(String::from)
 }
 
 pub fn build(input: &Path, output: Option<&Path>) -> Result<PathBuf> {

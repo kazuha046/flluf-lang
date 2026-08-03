@@ -33,7 +33,7 @@ void Main():
 
 	// Log("1" + 2); // Error
 
-	return Exit(0) // status code. 0 - Ok, 1 - Error. Not necessary. Exit is part of System package
+	return Exit(0); // status code. 0 - Ok, 1 - Error. Not necessary. Exit is part of System package
 	// next code won't work.
 
 	if(result1 == 77):

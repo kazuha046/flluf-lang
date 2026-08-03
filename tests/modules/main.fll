@@ -19,6 +19,8 @@ void Main():
 	Test();
 	Test("bon");
 	Test(3);
+
+	Log(12 + 12 / 2);
 }
 
 void Test(string a):

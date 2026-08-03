@@ -1,9 +1,13 @@
+use crate::error::Pos;
 use crate::syntax::token::Token;
 
 #[derive(Debug)]
 pub struct Lexer {
     chars: Vec<char>,
     pos: usize,
+    line: usize,
+    col: usize,
+    error: Option<(Pos, String)>,
 }
 
 impl Lexer {
@@ -11,6 +15,19 @@ impl Lexer {
         Self {
             chars: input.chars().collect(),
             pos: 0,
+            line: 1,
+            col: 1,
+            error: None,
+        }
+    }
+
+    pub fn error(&self) -> Option<&(Pos, String)> {
+        self.error.as_ref()
+    }
+
+    fn fail(&mut self, pos: Pos, msg: String) {
+        if self.error.is_none() {
+            self.error = Some((pos, msg));
         }
     }
 
@@ -21,7 +38,18 @@ impl Lexer {
     fn advance(&mut self) -> Option<char> {
         let c = self.chars.get(self.pos).copied();
 
-        self.pos += 1;
+        if c.is_some() {
+            self.pos += 1;
+
+            match c {
+                Some('\n') => {
+                    self.line += 1;
+                    self.col = 1;
+                }
+
+                _ => self.col += 1,
+            }
+        }
 
         c
     }
@@ -128,86 +156,96 @@ impl Lexer {
             if c == '\n' {
                 break;
             }
+
             self.advance();
         }
     }
 }
 
 impl Iterator for Lexer {
-    type Item = Token;
+    type Item = (Token, Pos);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             self.skip_whitespace();
 
+            let start = Pos::new(self.line, self.col);
+
             let c = self.advance()?;
 
-            return Some(match c {
-                '+' => Token::Plus,
-                '-' => Token::Minus,
-                '*' => Token::Star,
-                '/' => {
-                    if self.peek() == Some('/') {
-                        self.advance();
-                        self.skip_comment();
-                        continue;
-                    } else {
-                        Token::Slash
+            return Some((
+                match c {
+                    '+' => Token::Plus,
+                    '-' => Token::Minus,
+                    '*' => Token::Star,
+                    '/' => {
+                        if self.peek() == Some('/') {
+                            self.advance();
+                            self.skip_comment();
+                            continue;
+                        } else {
+                            Token::Slash
+                        }
                     }
-                }
-                '(' => Token::LParen,
-                ')' => Token::RParen,
-                '{' => Token::LBrace,
-                '}' => Token::RBrace,
-                ':' => {
-                    if self.peek() == Some(':') {
-                        self.advance();
-                        Token::ColonColon
-                    } else {
-                        Token::Colon
+                    '(' => Token::LParen,
+                    ')' => Token::RParen,
+                    '{' => Token::LBrace,
+                    '}' => Token::RBrace,
+                    ':' => {
+                        if self.peek() == Some(':') {
+                            self.advance();
+                            Token::ColonColon
+                        } else {
+                            Token::Colon
+                        }
                     }
-                }
-                ';' => Token::Semi,
-                '=' => {
-                    if self.peek() == Some('=') {
-                        self.advance();
-                        Token::Eq
-                    } else {
-                        Token::Equals
+                    ';' => Token::Semi,
+                    '=' => {
+                        if self.peek() == Some('=') {
+                            self.advance();
+                            Token::Eq
+                        } else {
+                            Token::Equals
+                        }
                     }
-                }
-                ',' => Token::Comma,
-                '!' => {
-                    if self.peek() == Some('=') {
-                        self.advance();
-                        Token::Ne
-                    } else {
-                        panic!("unexpected '!'")
+                    ',' => Token::Comma,
+                    '!' => {
+                        if self.peek() == Some('=') {
+                            self.advance();
+                            Token::Ne
+                        } else {
+                            self.fail(start, "unexpected '!'".to_string());
+                            return None;
+                        }
                     }
-                }
-                '<' => {
-                    if self.peek() == Some('=') {
-                        self.advance();
-                        Token::Le
-                    } else {
-                        Token::Lt
+                    '<' => {
+                        if self.peek() == Some('=') {
+                            self.advance();
+                            Token::Le
+                        } else {
+                            Token::Lt
+                        }
                     }
-                }
-                '>' => {
-                    if self.peek() == Some('=') {
-                        self.advance();
-                        Token::Ge
-                    } else {
-                        Token::Gt
+                    '>' => {
+                        if self.peek() == Some('=') {
+                            self.advance();
+                            Token::Ge
+                        } else {
+                            Token::Gt
+                        }
                     }
-                }
-                '"' => self.read_string(),
+                    '"' => self.read_string(),
 
-                c if c.is_ascii_digit() => self.read_number(c),
-                c if c.is_alphabetic() || c == '_' => self.read_ident(c),
+                    c if c.is_ascii_digit() => self.read_number(c),
+                    c if c.is_alphabetic() || c == '_' => self.read_ident(c),
 
-                c => panic!("unexpected character: '{c}'"),
-            });
+                    c => {
+                        self.fail(start, format!("unexpected character: '{c}'"));
+                        return None;
+                    }
+                },
+                start,
+            ));
         }
     }
 }

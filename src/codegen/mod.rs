@@ -14,7 +14,8 @@ pub use types::{
     widen,
 };
 
-pub type VarMap = std::collections::HashMap<String, (StackSlot, Tag, bool)>;
+pub type VarMap =
+    std::collections::HashMap<String, (StackSlot, Tag, bool, crate::syntax::ast::FllufType)>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Tag {
@@ -31,10 +32,26 @@ pub struct TypedValue {
 pub struct Compiler {
     pub module: cranelift_object::ObjectModule,
     pub imports: std::collections::HashSet<String>,
+    pub current_mp: Vec<String>,
+}
+
+impl Compiler {
+    pub fn err_at(
+        &self,
+        resolver: &ModuleResolver,
+        line: usize,
+        msg: impl std::fmt::Display,
+    ) -> anyhow::Error {
+        resolver.render(
+            &self.current_mp,
+            crate::error::Pos::new(line, 1),
+            &msg.to_string(),
+        )
+    }
 }
 
 pub fn compile(resolver: &ModuleResolver) -> Result<Vec<u8>> {
-    let has_main = resolver.all_functions.iter().any(|(n, _)| n == "main");
+    let has_main = resolver.all_functions.iter().any(|(n, _, _)| n == "main");
 
     if !has_main {
         bail!("program must have a 'Main' function");
@@ -61,6 +78,7 @@ pub fn compile(resolver: &ModuleResolver) -> Result<Vec<u8>> {
     let mut comp = Compiler {
         module,
         imports: std::collections::HashSet::new(),
+        current_mp: Vec::new(),
     };
 
     comp.compile_program(resolver)?;

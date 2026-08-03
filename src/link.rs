@@ -8,7 +8,7 @@ fn write_runtime_c(obj: &Path) -> Result<PathBuf> {
     let dir = obj
         .parent()
         .with_context(|| format!("no parent directory for {}", obj.display()))?;
-    
+
     let path = dir.join("flluf_runtime.c");
 
     std::fs::write(&path, RUNTIME_C).context("write flluf_runtime.c")?;

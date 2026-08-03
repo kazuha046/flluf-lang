@@ -1,7 +1,7 @@
 use crate::codegen::*;
 use crate::resolver::ModuleResolver;
 use crate::syntax::ast::*;
-use anyhow::{Result, bail};
+use anyhow::Result;
 use cranelift::codegen::ir::types;
 use cranelift::prelude::*;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
@@ -13,7 +13,7 @@ impl Compiler {
         let func_ids: Vec<_> = resolver
             .all_functions
             .iter()
-            .map(|(mangled, f)| self.declare(mangled, f))
+            .map(|(mangled, f, _)| self.declare(mangled, f))
             .collect();
 
         let global_ids: Vec<_> = resolver
@@ -24,8 +24,8 @@ impl Compiler {
 
         let mut ctx = FunctionBuilderContext::new();
 
-        for ((mangled, f), id) in resolver.all_functions.iter().zip(&func_ids) {
-            self.compile_function(mangled, f, *id, &mut ctx, resolver)?;
+        for ((mangled, f, mp), id) in resolver.all_functions.iter().zip(&func_ids) {
+            self.compile_function(mangled, f, mp, *id, &mut ctx, resolver)?;
         }
 
         for ((_, g), id) in resolver.all_globals.iter().zip(&global_ids) {
@@ -106,10 +106,12 @@ impl Compiler {
         &mut self,
         mangled: &str,
         func: &Function,
+        mp: &[String],
         id: FuncId,
         ctx: &mut FunctionBuilderContext,
         resolver: &ModuleResolver,
     ) -> Result<()> {
+        self.current_mp = mp.to_vec();
         let mut data = self.module.make_context();
 
         let sig = self
@@ -144,7 +146,7 @@ impl Compiler {
 
             let tag = tag_from_type(&p.param_type);
 
-            vars.insert(p.name.clone(), (slot, tag, p.mut_));
+            vars.insert(p.name.clone(), (slot, tag, p.mut_, p.param_type.clone()));
         }
 
         let is_main = mangled == "main";
@@ -175,11 +177,14 @@ impl Compiler {
                 }
 
                 _ => {
-                    bail!(
-                        "function `{}` must return a value of type `{}`",
-                        func.name,
-                        func.return_type
-                    );
+                    return Err(self.err_at(
+                        resolver,
+                        func.line,
+                        format!(
+                            "function `{}` must return a value of type `{}`",
+                            func.name, func.return_type
+                        ),
+                    ));
                 }
             }
         }
@@ -188,7 +193,13 @@ impl Compiler {
 
         builder.finalize(target_config);
 
-        self.module.define_function(id, &mut data)?;
+        self.module.define_function(id, &mut data).map_err(|e| {
+            self.err_at(
+                resolver,
+                func.line,
+                format!("failed to compile function `{}`: {e}", func.name),
+            )
+        })?;
 
         Ok(())
     }

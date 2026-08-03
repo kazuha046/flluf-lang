@@ -1,6 +1,7 @@
 use crate::codegen::*;
+use crate::resolver::ModuleResolver;
 use crate::syntax::ast::FllufType;
-use anyhow::{Result, bail};
+use anyhow::Result;
 use cranelift::codegen::ir::types;
 use cranelift::prelude::*;
 use cranelift_frontend::FunctionBuilder;
@@ -43,17 +44,58 @@ impl Compiler {
         }
     }
 
-    pub fn check_types(&self, a: &TypedValue, b: &TypedValue) -> Result<()> {
+    pub fn check_types(
+        &self,
+        a: &TypedValue,
+        b: &TypedValue,
+        line: usize,
+        resolver: &ModuleResolver,
+    ) -> Result<()> {
         match (a.tag, b.tag) {
             (Tag::Ptr, _) | (_, Tag::Ptr) => {
-                bail!("cannot use string in arithmetic");
+                Err(self.err_at(resolver, line, "cannot use string in arithmetic"))
             }
 
-            (a_tag, b_tag) if a_tag != b_tag => {
-                bail!("type mismatch: {a_tag:?} vs {b_tag:?}");
-            }
+            (a_tag, b_tag) if a_tag != b_tag => Err(self.err_at(
+                resolver,
+                line,
+                format!("type mismatch: {a_tag:?} vs {b_tag:?}"),
+            )),
 
             _ => Ok(()),
+        }
+    }
+
+    pub fn check_assign(
+        &self,
+        target: &FllufType,
+        value_tag: Tag,
+        line: usize,
+        resolver: &ModuleResolver,
+        what: &str,
+    ) -> Result<()> {
+        let value_ty = match value_tag {
+            Tag::Int => FllufType::Int,
+            Tag::Float => FllufType::Float,
+            Tag::Ptr => FllufType::String,
+        };
+
+        let ok = matches!(
+            (&value_ty, target),
+            (FllufType::Int, FllufType::Int)
+                | (FllufType::Float, FllufType::Float)
+                | (FllufType::String, FllufType::String)
+                | (FllufType::Int, FllufType::Float)
+        );
+
+        if ok {
+            Ok(())
+        } else {
+            Err(self.err_at(
+                resolver,
+                line,
+                format!("type mismatch: cannot use {value_ty} as {target} {what}"),
+            ))
         }
     }
 

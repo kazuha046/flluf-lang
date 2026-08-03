@@ -2,6 +2,7 @@
 mod build;
 mod cli;
 mod codegen;
+mod error;
 mod link;
 mod resolver;
 mod syntax;

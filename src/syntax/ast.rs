@@ -3,20 +3,24 @@ pub enum Use {
     Module {
         pub_: bool,
         path: Vec<String>,
+        line: usize,
     },
     Wildcard {
         pub_: bool,
         path: Vec<String>,
+        line: usize,
     },
     Item {
         pub_: bool,
         path: Vec<String>,
         name: String,
+        line: usize,
     },
     Items {
         pub_: bool,
         path: Vec<String>,
         names: Vec<String>,
+        line: usize,
     },
 }
 
@@ -53,6 +57,7 @@ pub struct Function {
     pub name: String,
     pub params: Vec<Param>,
     pub body: Block,
+    pub line: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -82,13 +87,15 @@ pub enum Stmt {
         var_type: FllufType,
         name: String,
         value: Expr,
+        line: usize,
     },
     Assign {
         name: String,
         value: Expr,
+        line: usize,
     },
-    Return(Expr),
-    Expr(Expr),
+    Return(Expr, usize),
+    Expr(Expr, usize),
     If {
         cond: Expr,
         then_block: Block,
@@ -102,11 +109,11 @@ pub enum Expr {
     IntLit(i64),
     FloatLit(f64),
     StringLit(String),
-    Variable(String),
-    BinaryOp(Box<Expr>, BinOp, Box<Expr>),
-    Call(String, Vec<Expr>),
-    ModuleCall(String, String, Vec<Expr>),
-    ModuleVar(String, String),
+    Variable(String, usize),
+    BinaryOp(Box<Expr>, BinOp, Box<Expr>, usize),
+    Call(String, Vec<Expr>, usize),
+    ModuleCall(String, String, Vec<Expr>, usize),
+    ModuleVar(String, String, usize),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
